@@ -40,7 +40,7 @@ class BaseLoader(Dataset):
             "--preprocess", default=None, action='store_true')
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data):
+    def __init__(self, dataset_name, raw_data_path, config_data ):
         """Inits dataloader with lists of files.
 
         Args:
@@ -57,6 +57,10 @@ class BaseLoader(Dataset):
         self.preprocessed_data_len = 0
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
+        self.loo = config_data.LOO
+        self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
+        if self.loo:
+            self.participant_ids = config_data.PARTICIPANT_IDS
 
         assert (config_data.BEGIN < config_data.END)
         assert (config_data.BEGIN > 0 or config_data.BEGIN == 0)
@@ -122,7 +126,7 @@ class BaseLoader(Dataset):
         raise Exception("'get_raw_data' Not Implemented")
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values, 
+        """Returns a subset of data dirs, split with begin and end values,
         and ensures no overlapping subjects between splits.
 
         Args:
@@ -185,12 +189,12 @@ class BaseLoader(Dataset):
         pos_bvp = signal.filtfilt(b, a, bvp.astype(np.double))
 
         # apply hilbert normalization to normalize PPG amplitude
-        analytic_signal = signal.hilbert(pos_bvp) 
+        analytic_signal = signal.hilbert(pos_bvp)
         amplitude_envelope = np.abs(analytic_signal) # derive envelope signal
         env_norm_bvp = pos_bvp/amplitude_envelope # normalize by env
 
         return env_norm_bvp # return data dict w/ POS psuedo labels
-    
+
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
 
@@ -200,9 +204,13 @@ class BaseLoader(Dataset):
             begin(float): index of begining during train/val split.
             end(float): index of ending during train/val split.
         """
-        data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset 
+        if not self.loo:
+            data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset
+        else:
+            data_dirs_split = self.split_raw_data_loo(data_dirs, self.participant_ids)
         # send data directories to be processed
-        file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess) 
+        file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess)
+        print(file_list_dict)
         self.build_file_list(file_list_dict)  # build file list
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
         print("Total Number of raw files preprocessed:", len(data_dirs_split), end='\n\n')
@@ -290,7 +298,7 @@ class BaseLoader(Dataset):
             face_box_coor[3] = larger_box_coef * face_box_coor[3]
         return face_box_coor
 
-    def crop_face_resize(self, frames, use_face_detection, use_larger_box, larger_box_coef, use_dynamic_detection, 
+    def crop_face_resize(self, frames, use_face_detection, use_larger_box, larger_box_coef, use_dynamic_detection,
                          detection_freq, use_median_box, width, height):
         """Crop face and resize frames.
 
@@ -404,7 +412,7 @@ class BaseLoader(Dataset):
         input_path_name_list = []
         label_path_name_list = []
         for i in range(len(bvps_clips)):
-            assert (len(self.inputs) == len(self.labels))
+            assert (len(self.inputs) == len(self.labels)), "Not processing this video"
             input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
             label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
             input_path_name_list.append(input_path_name)
@@ -414,7 +422,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=4):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:

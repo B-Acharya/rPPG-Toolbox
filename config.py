@@ -70,6 +70,8 @@ _C.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
 _C.TRAIN.DATA.PREPROCESS.RESIZE = CN()
 _C.TRAIN.DATA.PREPROCESS.RESIZE.W = 128
 _C.TRAIN.DATA.PREPROCESS.RESIZE.H = 128
+_C.TRAIN.DATA.LOO = False
+
 # -----------------------------------------------------------------------------
 # Valid settings
 # -----------------------------------------------------------------------------\
@@ -95,13 +97,14 @@ _C.VALID.DATA.DO_PREPROCESS = False
 _C.VALID.DATA.DATA_FORMAT = 'NDCHW'
 _C.VALID.DATA.BEGIN = 0.0
 _C.VALID.DATA.END = 1.0
+_C.VALID.DATA.LOO= False
 # Valid Data preprocessing
 _C.VALID.DATA.PREPROCESS = CN()
 _C.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
 _C.VALID.DATA.PREPROCESS.DATA_TYPE = ['']
 _C.VALID.DATA.PREPROCESS.DATA_AUG = ['None']
 _C.VALID.DATA.PREPROCESS.LABEL_TYPE = ''
-_C.VALID.DATA.PREPROCESS.DO_CHUNK = True
+_C.VALID.DATA.PREPROCESS.DO_CHUNK = False
 _C.VALID.DATA.PREPROCESS.CHUNK_LENGTH = 180
 _C.VALID.DATA.PREPROCESS.CROP_FACE = CN()
 _C.VALID.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
@@ -142,6 +145,7 @@ _C.TEST.DATA.DO_PREPROCESS = False
 _C.TEST.DATA.DATA_FORMAT = 'NDCHW'
 _C.TEST.DATA.BEGIN = 0.0
 _C.TEST.DATA.END = 1.0
+_C.TEST.DATA.LOO = False
 # Test Data preprocessing
 _C.TEST.DATA.PREPROCESS = CN()
 _C.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
@@ -207,6 +211,61 @@ _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
 _C.UNSUPERVISED.DATA.PREPROCESS.RESIZE = CN()
 _C.UNSUPERVISED.DATA.PREPROCESS.RESIZE.W = 128
 _C.UNSUPERVISED.DATA.PREPROCESS.RESIZE.H = 128
+_C.UNSUPERVISED.DATA.LOO = False
+_C.UNSUPERVISED.DATA.PARTICIPANT_IDS = ''
+
+# -----------------------------------------------------------------------------
+# Unsupervised method settings
+# -----------------------------------------------------------------------------\
+_C.LOO = CN()
+_C.LOO.METHOD = []
+_C.LOO.METRICS = []
+# Unsupervised.Data settings
+_C.LOO = CN()
+_C.LOO.METHOD = []
+_C.LOO.METRICS = []
+# Unsupervised.Data settings
+_C.LOO.DATA = CN()
+_C.LOO.DATA.INFO = CN()
+_C.LOO.DATA.INFO.LIGHT = ['']
+_C.LOO.DATA.INFO.MOTION = ['']
+_C.LOO.DATA.INFO.EXERCISE = [True]
+_C.LOO.DATA.INFO.SKIN_COLOR = [1]
+_C.LOO.DATA.INFO.GENDER = ['']
+_C.LOO.DATA.INFO.GLASSER = [True]
+_C.LOO.DATA.INFO.HAIR_COVER = [True]
+_C.LOO.DATA.INFO.MAKEUP = [True]
+_C.LOO.DATA.FS = 0
+_C.LOO.DATA.DATA_PATH = ''
+_C.LOO.DATA.EXP_DATA_NAME = ''
+_C.LOO.DATA.CACHED_PATH = 'PreprocessedData'
+_C.LOO.DATA.FILE_LIST_PATH = os.path.join(_C.UNSUPERVISED.DATA.CACHED_PATH, 'DataFileLists')
+_C.LOO.DATA.DATASET = ''
+_C.LOO.DATA.DO_PREPROCESS = False
+_C.LOO.DATA.DATA_FORMAT = 'NDCHW'
+_C.LOO.DATA.BEGIN = 0.0
+_C.LOO.DATA.END = 1.0
+# Unsupervised Data preprocessing
+_C.LOO.DATA.PREPROCESS = CN()
+_C.LOO.DATA.PREPROCESS.DATA_TYPE = ['']
+_C.LOO.DATA.PREPROCESS.DATA_AUG = ['None']
+_C.LOO.DATA.PREPROCESS.LABEL_TYPE = ''
+_C.LOO.DATA.PREPROCESS.TRIM = False
+_C.LOO.DATA.PREPROCESS.DO_CHUNK = True
+_C.LOO.DATA.PREPROCESS.CHUNK_LENGTH = 180
+_C.LOO.DATA.PREPROCESS.CROP_FACE = CN()
+_C.LOO.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
+_C.LOO.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX = True
+_C.LOO.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF = 1.5
+_C.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION = CN()
+_C.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION = False
+_C.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY = 30
+_C.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
+_C.LOO.DATA.PREPROCESS.RESIZE = CN()
+_C.LOO.DATA.PREPROCESS.RESIZE.W = 128
+_C.LOO.DATA.PREPROCESS.RESIZE.H = 128
+_C.LOO.DATA.LOO = False
+_C.LOO.DATA.PARTICIPANT_IDS = ''
 
 ### -----------------------------------------------------------------------------
 # Model settings
@@ -252,6 +311,13 @@ _C.INFERENCE.MODEL_PATH = ''
 # -----------------------------------------------------------------------------
 _C.DEVICE = "cuda:0"
 _C.NUM_OF_GPU_TRAIN = 1
+# Early stopping settings
+_C.EARLY_STOPPING = CN()
+_C.EARLY_STOPPING.TRAIN = False
+_C.EARLY_STOPPING.VALID = False
+_C.EARLY_STOPPING.PATIENCE = 2
+_C.EARLY_STOPPING.DELTA = 0.01
+
 
 # -----------------------------------------------------------------------------
 # Log settings
@@ -282,6 +348,7 @@ def update_config(config, args):
     default_VALID_FILE_LIST_PATH = config.VALID.DATA.FILE_LIST_PATH
     default_TEST_FILE_LIST_PATH = config.TEST.DATA.FILE_LIST_PATH
     default_UNSUPERVISED_FILE_LIST_PATH = config.UNSUPERVISED.DATA.FILE_LIST_PATH
+    default_LOO_FILE_LIST_PATH = config.LOO.DATA.FILE_LIST_PATH
 
     # update flag from config file
     _update_config_from_file(config, args.config_file)
@@ -449,6 +516,41 @@ def update_config(config, args):
         raise ValueError('User specified UNSUPERVISED dataset FILE_LIST_PATH .csv file already exists. \
                          Please turn DO_PREPROCESS to False or delete existing UNSUPERVISED dataset FILE_LIST_PATH .csv file.')
 
+    # UPDATE LOO PATHS
+    if config.LOO.DATA.FILE_LIST_PATH == default_LOO_FILE_LIST_PATH:
+        config.LOO.DATA.FILE_LIST_PATH = os.path.join(config.LOO.DATA.CACHED_PATH, 'DataFileLists')
+
+    if config.LOO.DATA.EXP_DATA_NAME == '':
+        config.LOO.DATA.EXP_DATA_NAME = "_".join([config.LOO.DATA.DATASET, "SizeW{0}".format(
+            str(config.LOO.DATA.PREPROCESS.RESIZE.W)), "SizeH{0}".format(str(config.LOO.DATA.PREPROCESS.RESIZE.H)),
+                                                   "ClipLength{0}".format(
+                                                       str(config.LOO.DATA.PREPROCESS.CHUNK_LENGTH)),
+                                                   "DataType{0}".format(
+                                                       "_".join(config.LOO.DATA.PREPROCESS.DATA_TYPE)),
+                                                   "LabelType{0}".format(config.LOO.DATA.PREPROCESS.LABEL_TYPE),
+                                                   "Large_box{0}".format(
+                                                       config.LOO.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX),
+                                                   "Large_size{0}".format(
+                                                       config.LOO.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
+                                                   "Dyamic_Det{0}".format(
+                                                       config.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
+                                                   "det_len{0}".format(
+                                                       config.LOO.DATA.PREPROCESS.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY)
+                                                   ])
+    config.LOO.DATA.CACHED_PATH = os.path.join(config.LOO.DATA.CACHED_PATH, config.LOO.DATA.EXP_DATA_NAME)
+
+    name, ext = os.path.splitext(config.LOO.DATA.FILE_LIST_PATH)
+    if not ext:  # no file extension
+        config.LOO.DATA.FILE_LIST_PATH = os.path.join(config.LOO.DATA.FILE_LIST_PATH, \
+                                                       config.LOO.DATA.EXP_DATA_NAME + '_' + \
+                                                       str(config.LOO.DATA.BEGIN) + '_' + \
+                                                       str(config.LOO.DATA.END) + '.csv')
+    elif ext != '.csv':
+        raise ValueError('LOO dataset FILE_LIST_PATH must either be a directory path or a .csv file name')
+
+    if ext == '.csv' and config.LOO.DATA.DO_PREPROCESS:
+        raise ValueError('User specified LOO dataset FILE_LIST_PATH .csv file already exists. \
+                         Please turn DO_PREPROCESS to False or delete existing LOO dataset FILE_LIST_PATH .csv file.')
 
     config.LOG.PATH = os.path.join(
         config.LOG.PATH, config.VALID.DATA.EXP_DATA_NAME)

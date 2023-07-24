@@ -3,7 +3,13 @@ import pandas as pd
 import torch
 from evaluation.post_process import *
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import mlflow
 
+
+def calcualte_mae_per_setting(dataframe):
+    mae = np.mean(np.abs(dataframe["HR_GT"] - dataframe["HR_Pred"]))
+    return mae
 
 def read_label(dataset):
     """Read manually corrected labels."""
@@ -12,6 +18,57 @@ def read_label(dataset):
     out_dict = {str(value['VideoID']): value for key, value in out_dict.items()}
     return out_dict
 
+def log_HR_HR_plot(logger, predictions):
+
+    HR_gt = []
+    HR_pred = []
+    print("keys=====")
+    print(predictions.keys())
+    for key in predictions.keys():
+        HR_gt.append(predictions[key]['GT_HR'])
+        HR_pred.append(predictions[key]['Pred_HR'])
+
+    # min_HR = min(HR_pred)
+    max_HR = max(HR_pred)
+    plt.scatter(HR_pred, HR_gt)
+    plt.plot([0, max_HR], [0, max_HR], "r--")
+    plt.xlabel("HR from Video")
+    plt.ylabel("HR ground Truth")
+    logger.experiment.log_figure(figure=plt, figure_name="GT HR vs Pred HR ")
+    plt.close()
+
+def plot_bland(logger, predictions):
+    HR_gt = []
+    HR_pred = []
+    print("keys=====")
+    print(predictions.keys())
+    for key in predictions.keys():
+        HR_gt.append(predictions[key]['GT_HR'])
+        HR_pred.append(predictions[key]['Pred_HR'])
+
+    hr = np.concatenate((np.array(HR_gt).reshape(-1, 1), np.array(HR_pred).reshape(-1, 1)), axis=1)
+    averages_NR = np.mean(hr, axis=1)
+    diff_NR = np.diff(hr, axis=1)
+    diff_NR_mean, diff_NR_std = np.mean(diff_NR), np.std(diff_NR)
+    upper_limit_NR = diff_NR_mean + 1.96 * diff_NR_std
+    lower_limit_NR = diff_NR_mean - 1.96 * diff_NR_std
+
+    x_value = np.max(averages_NR)
+
+    plt.scatter(averages_NR, diff_NR)
+    plt.hlines(upper_limit_NR, min(averages_NR), max(averages_NR), colors="red", linestyle="dashed", label="+1.96SD")
+    plt.hlines(lower_limit_NR, min(averages_NR), max(averages_NR), colors="red", linestyle="dashed", label="-1.96SD")
+    plt.hlines(diff_NR_mean, min(averages_NR), max(averages_NR), colors="Blue", linestyle="solid", label="Mean")
+    plt.text(x_value, upper_limit_NR + 1, "+1.96SD")
+    plt.text(x_value, upper_limit_NR - 1, f"{upper_limit_NR:.2f}")
+    plt.text(x_value, lower_limit_NR + 1, "+1.96SD")
+    plt.text(x_value, lower_limit_NR - 1, f"{lower_limit_NR:.2f}")
+    plt.text(x_value, diff_NR_mean + 1, "Mean")
+    plt.text(x_value, diff_NR_mean - 1, f"{diff_NR_mean:.2f}")
+    plt.xlabel("Average of the estimated HR and Ground truth")
+    plt.ylabel("Difference between estimated HR and ground truth HR")
+    logger.experiment.log_figure(figure=plt, figure_name="Bland-Altman-Plot")
+    plt.close()
 
 def read_hr_label(feed_dict, index):
     """Read manually corrected UBFC labels."""
@@ -36,13 +93,16 @@ def _reform_data_from_dict(data):
     return np.reshape(sort_data.cpu(), (-1))
 
 
-def calculate_metrics(predictions, labels, config):
+def calculate_metrics(predictions, labels, config, logger):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
     predict_hr_fft_all = list()
     gt_hr_fft_all = list()
     predict_hr_peak_all = list()
     gt_hr_peak_all = list()
     SNR_all = list()
+    gt_hr_fft_dict = dict()
+    pred_hr_fft_dict = dict()
+    predictions_dict = dict()
     for index in tqdm(predictions.keys(), ncols=80):
         prediction = _reform_data_from_dict(predictions[index])
         label = _reform_data_from_dict(labels[index])
@@ -77,14 +137,24 @@ def calculate_metrics(predictions, labels, config):
                 gt_hr_peak_all.append(gt_hr_peak)
                 predict_hr_peak_all.append(pred_hr_peak)
                 SNR_all.append(SNR)
+                predictions_dict[index] = {"GT_HR": gt_hr_peak, "Pred_HR": pred_hr_peak}
             elif config.INFERENCE.EVALUATION_METHOD == "FFT":
                 gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
                     prediction, label, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
                 gt_hr_fft_all.append(gt_hr_fft)
                 predict_hr_fft_all.append(pred_hr_fft)
                 SNR_all.append(SNR)
+                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
             else:
                 raise ValueError("Inference evaluation method name wrong!")
+
+            for metric in config.TEST.METRICS:
+                if metric == "MAE":
+                    MAE = np.mean(np.abs(gt_hr_fft - pred_hr_fft))
+                    print("FFT MAE (FFT Label): {0} ".format(MAE))
+                    logger.log_metrics({index:MAE} )
+    log_HR_HR_plot(logger, predictions_dict)
+    plot_bland(logger, predictions_dict)
 
     if config.INFERENCE.EVALUATION_METHOD == "FFT":
         gt_hr_fft_all = np.array(gt_hr_fft_all)
@@ -96,23 +166,29 @@ def calculate_metrics(predictions, labels, config):
                 MAE_FFT = np.mean(np.abs(predict_hr_fft_all - gt_hr_fft_all))
                 standard_error = np.std(np.abs(predict_hr_fft_all - gt_hr_fft_all)) / np.sqrt(num_test_samples)
                 print("FFT MAE (FFT Label): {0} +/- {1}".format(MAE_FFT, standard_error))
+                logger.log_metrics({"FFT MAE": MAE_FFT, "FFT MAE std":standard_error})
             elif metric == "RMSE":
                 RMSE_FFT = np.sqrt(np.mean(np.square(predict_hr_fft_all - gt_hr_fft_all)))
                 standard_error = np.std(np.square(predict_hr_fft_all - gt_hr_fft_all)) / np.sqrt(num_test_samples)
                 print("FFT RMSE (FFT Label): {0} +/- {1}".format(RMSE_FFT, standard_error))
+                logger.log_metrics({"FFT RMSE": RMSE_FFT, "FFT RMSE std":standard_error})
             elif metric == "MAPE":
                 MAPE_FFT = np.mean(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) * 100
                 standard_error = np.std(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) / np.sqrt(num_test_samples) * 100
                 print("FFT MAPE (FFT Label): {0} +/- {1}".format(MAPE_FFT, standard_error))
+                logger.log_metrics({"FFT MAPE": MAPE_FFT, "FFT MAPE std":standard_error})
             elif metric == "Pearson":
                 Pearson_FFT = np.corrcoef(predict_hr_fft_all, gt_hr_fft_all)
                 correlation_coefficient = Pearson_FFT[0][1]
                 standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
                 print("FFT Pearson (FFT Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
+                logger.log_metrics({"FFT Pearson ":correlation_coefficient, "FFT Pearson std":standard_error})
+
             elif metric == "SNR":
                 SNR_FFT = np.mean(SNR_all)
                 standard_error = np.std(SNR_all) / np.sqrt(num_test_samples)
                 print("FFT SNR (FFT Label): {0} +/- {1}".format(SNR_FFT, standard_error))
+                logger.log_metrics({"FFT SNR_FFT":Pearson_FFT, "FFT SNR std":standard_error})
             else:
                 raise ValueError("Wrong Test Metric Type")
     elif config.INFERENCE.EVALUATION_METHOD == "peak detection":
@@ -146,3 +222,24 @@ def calculate_metrics(predictions, labels, config):
                 raise ValueError("Wrong Test Metric Type")
     else:
         raise ValueError("Inference evaluation method name wrong!")
+
+    if config.TEST.DATA.DATASET == "CMBP":
+        result = {'LowHR_Bright': {}, 'LowHR_Dark': {}, 'HighHR_Dark': {}, 'HighHR_Bright': {}}
+        for index in predictions_dict.keys():
+            HR_GT, HR_pred = predictions_dict[index]["GT_HR"], predictions_dict[index]["Pred_HR"]
+
+            if index[-1] == "0":
+                result['LowHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            elif index[-1] == "1":
+                result['LowHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            if index[-1] == "2":
+                result['HighHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            if index[-1] == "3":
+                result['HighHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+
+        for key in result.keys():
+            dataframe = pd.DataFrame.from_dict(result[key]).T
+            mae = calcualte_mae_per_setting(dataframe)
+            print(f"--{key}--")
+            print(mae)
+            logger.log_metrics({key: mae})

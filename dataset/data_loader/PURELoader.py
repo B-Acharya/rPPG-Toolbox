@@ -21,6 +21,8 @@ from tqdm import tqdm
 class PURELoader(BaseLoader):
     """The data loader for the PURE dataset."""
 
+    num_of_participants = 10
+
     def __init__(self, name, data_path, config_data):
         """Initializes an PURE dataloader.
             Args:
@@ -43,11 +45,18 @@ class PURELoader(BaseLoader):
                 config_data(CfgNode): data settings(ref:config.py).
         """
         super().__init__(name, data_path, config_data)
+        self.num_of_participants = 10
 
     def get_raw_data(self, data_path):
         """Returns data directories under the path(For PURE dataset)."""
 
-        data_dirs = glob.glob(data_path + os.sep + "*-*")
+        data_dirs = list(glob.glob(data_path + os.sep + "*-*"))
+        temp = list()
+        for data_dir in data_dirs:
+            if os.path.isdir(data_dir):
+                temp.append(data_dir)
+
+        data_dirs = temp
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
         dirs = list()
@@ -59,7 +68,7 @@ class PURELoader(BaseLoader):
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values, 
+        """Returns a subset of data dirs, split with begin and end values,
         and ensures no overlapping subjects between splits"""
 
         # return the full directory
@@ -97,6 +106,13 @@ class PURELoader(BaseLoader):
 
         return data_dirs_new
 
+    def split_raw_data_loo(self, data_dirs, participant_ids):
+        data_dirs_new = list()
+        for data_dir in data_dirs:
+            if data_dir['subject'] in participant_ids:
+                data_dirs_new.append(data_dir)
+        return data_dirs_new
+
     def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
         """ Invoked by preprocess_dataset for multi_process. """
         filename = os.path.split(data_dirs[i]['path'])[-1]
@@ -105,18 +121,26 @@ class PURELoader(BaseLoader):
         if 'None' in config_preprocess.DATA_AUG:
             # Utilize dataset-specific function to read video
             frames = self.read_video(
-                os.path.join(data_dirs[i]['path'], filename, ""))
+                os.path.join(data_dirs[i]['path'], ""))
         elif 'Motion' in config_preprocess.DATA_AUG:
             # Utilize general function to read video in .npy format
             frames = self.read_npy_video(
                 glob.glob(os.path.join(data_dirs[i]['path'], filename, '*.npy')))
         else:
             raise ValueError(f'Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}.')
+
+
+        # bvps = self.read_wave(
+        #     os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
         bvps = self.read_wave(
-            os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
+            os.path.join(self.raw_data_path, "{0}.json".format(filename)))
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
+        # if config_preprocess.TRIM:
+        #     frames = frames[:1800]
+        #     bvps = bvps[:1800]
         frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
+
         input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
         file_list_dict[i] = input_name_list
 

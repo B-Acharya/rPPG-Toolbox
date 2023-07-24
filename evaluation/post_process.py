@@ -93,7 +93,7 @@ def _calculate_SNR(pred_ppg_signal, hr_label, fs=30, low_pass=0.75, high_pass=2.
     SNR = mag2db((signal_power_hm1 + signal_power_hm2) / signal_power_rem)
     return SNR
 
-def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=True, use_bandpass=True, hr_method='FFT'):
+def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=False, use_bandpass=True, hr_method='FFT'):
     """Calculate video-level HR and SNR"""
     if diff_flag:  # if the predictions and labels are 1st derivative of PPG signal.
         predictions = _detrend(np.cumsum(predictions), 100)
