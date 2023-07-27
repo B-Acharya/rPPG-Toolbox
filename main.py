@@ -75,6 +75,13 @@ def train_and_test(config, data_loader_dict):
         experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
         log_code=False
     )
+    # Overfitting testing
+    # comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+    #     project_name="rppg",
+    #     workspace="b-acharya",
+    #     experiment_name= "overfit-testing",
+    #     log_code=False
+    # )
     # comet_logger.add_tag("train_validation_test")
     hyper_parameters = {
         "Learning_rate": config.TRAIN.LR,
@@ -104,11 +111,17 @@ def train_and_test(config, data_loader_dict):
         # print("Testing uses pretrained model!")
         pass
     else:
-        #create checkpoint every epoch
-        checkpoint_callback = ModelCheckpoint(every_n_epochs=1, save_top_k=-1,dirpath=config.MODEL.MODEL_DIR, filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",)
+        #create checkpoint every epoch and track the validation loss
+        checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
+                                              save_top_k=-1,
+                                              dirpath=config.MODEL.MODEL_DIR,
+                                              filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
+                                              monitor="val_loss_epoch",
+                                              mode='min')
         if config.EARLY_STOPPING.TRAIN:
-            early_stop_callback = EarlyStopping(monitor="val_accuracy", min_delta=0.00, patience=3, verbose=False,
-                                                mode="max")
+            early_stop_callback = EarlyStopping(monitor="train_loss_epoch", min_delta=0.00, patience=3, verbose=False,
+                                                mode="min")
+            comet_logger.experiment.add_tag("Early_stopping")
             trainer_light= pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
         else:
             # trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
@@ -116,8 +129,6 @@ def train_and_test(config, data_loader_dict):
 
             #Slurm settings
             trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp', accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
-
-
 
         trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
 
@@ -247,6 +258,8 @@ if __name__ == "__main__":
             valid_loader = data_loader.CMBPLoader.CMBPLoader
         elif config.VALID.DATA.DATASET == "BP4DPlus":
             valid_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
+        elif config.VALID.DATA.DATASET == "VIPL":
+            valid_loader = data_loader.VIPLLoader.VIPLLoader
         elif config.VALID.DATA.DATASET is None and not config.TEST.USE_LAST_EPOCH:
                 raise ValueError("Validation dataset not specified despite USE_LAST_EPOCH set to False!")
         else:
@@ -284,6 +297,8 @@ if __name__ == "__main__":
             test_loader = data_loader.CMBPLoader.CMBPLoader
         elif config.TEST.DATA.DATASET == "BP4DPlus":
             test_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
+        elif config.TEST.DATA.DATASET == "VIPL":
+            test_loader = data_loader.VIPLLoader.VIPLLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 

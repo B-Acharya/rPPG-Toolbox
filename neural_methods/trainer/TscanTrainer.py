@@ -69,7 +69,8 @@ class TscanTrainer(pl.LightningModule):
         pred_ppg = self.model(data)
         loss = self.criterion(pred_ppg, labels)
         running_loss += loss.item()
-        self.logger.log_metrics({"train_loss" : loss, }, self.current_epoch)
+        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        # self.logger.log_metrics({"train_loss" : loss, }, self.current_epoch)
         #TODO: update the validaiton loop according to the use last epoch stratergy
         # if not self.config.TEST.USE_LAST_EPOCH:
         #     valid_loss = self.valid(data_loader)
@@ -86,10 +87,12 @@ class TscanTrainer(pl.LightningModule):
         #     print("best trained epoch: {}, min_val_loss: {}".format(self.best_epoch, self.min_valid_loss))
         return loss
 
+
     def validation_step(self, batch, batch_idx):
         """ Model evaluation on the validation dataset."""
         if batch is None:
             raise ValueError("No data for valid")
+
         data_valid, labels_valid = batch[0].to(
                     self.device), batch[1].to(self.device)
         N, D, C, H, W = data_valid.shape
@@ -99,7 +102,9 @@ class TscanTrainer(pl.LightningModule):
         labels_valid = labels_valid[:(N * D) // self.base_len * self.base_len]
         pred_ppg_valid = self.model(data_valid)
         loss = self.criterion(pred_ppg_valid, labels_valid)
-        self.logger.log_metrics({"val_loss" : loss, }, self.current_epoch)
+        # self.logger.log_metrics({"val_loss" : loss, }, self.current_epoch)
+        # self.log("val_loss", loss, on_step=True)
+        self.log("val_loss", loss, on_epoch=True, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):
