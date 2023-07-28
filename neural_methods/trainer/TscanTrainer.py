@@ -69,7 +69,7 @@ class TscanTrainer(pl.LightningModule):
         pred_ppg = self.model(data)
         loss = self.criterion(pred_ppg, labels)
         running_loss += loss.item()
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, batch_size=self.config.TRAIN.BATCH_SIZE, sync_dist=True )
         # self.logger.log_metrics({"train_loss" : loss, }, self.current_epoch)
         #TODO: update the validaiton loop according to the use last epoch stratergy
         # if not self.config.TEST.USE_LAST_EPOCH:

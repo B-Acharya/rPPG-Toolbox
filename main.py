@@ -91,6 +91,8 @@ def train_and_test(config, data_loader_dict):
     comet_logger.log_hyperparams(hyper_parameters)
     comet_logger.experiment.add_tags([config.MODEL.NAME, config.TRAIN.DATA.DATASET, config.TRAIN.DATA.PREPROCESS.LABEL_TYPE])
     comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+    comet_logger.experiment.add_tag(config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH)
+    comet_logger.experiment.add_tag("Batch_size:" + str(config.TRAIN.BATCH_SIZE))
 
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
