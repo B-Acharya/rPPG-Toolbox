@@ -104,7 +104,7 @@ class TscanTrainer(pl.LightningModule):
         loss = self.criterion(pred_ppg_valid, labels_valid)
         # self.logger.log_metrics({"val_loss" : loss, }, self.current_epoch)
         # self.log("val_loss", loss, on_step=True)
-        self.log("val_loss", loss, on_epoch=True, on_step=True)
+        self.log("val_loss", loss, batch_size=self.config.TRAIN.BATCH_SIZE, on_epoch=True, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):

@@ -145,6 +145,15 @@ class PhysnetTrainer(pl.LightningModule):
     def on_test_end(self) -> None:
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)
 
+    def configure_optimizers(self):
+        optimizer = optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=0)
+
+        # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
+        return [optimizer], scheduler
+
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
