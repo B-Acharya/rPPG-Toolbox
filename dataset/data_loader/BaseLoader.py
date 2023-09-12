@@ -9,6 +9,8 @@ import csv
 import glob
 import os
 import re
+
+import numpy
 from math import ceil
 from scipy import signal
 from scipy import sparse
@@ -22,6 +24,7 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 class BaseLoader(Dataset):
@@ -247,9 +250,21 @@ class BaseLoader(Dataset):
                 data.append(BaseLoader.diff_normalize_data(f_c))
             elif data_type == "Standardized":
                 data.append(BaseLoader.standardized_data(f_c))
+            elif data_type == "SkinSegmentation":
+                #import for skin segmation algorimths package by bob
+                data.append(BaseLoader.skin_segment_data(f_c))
+                # f, ax = plt.subplots(1, 1)
+                # ax.set_title('skin Image')
+                # ax.set_xticks([])
+                # ax.set_yticks([])
+                # ax.imshow(numpy.rollaxis(numpy.rollaxis(data[1][0], 2), 2))
+                # plt.show()
             else:
                 raise ValueError("Unsupported data type!")
+        print('pre data shape',data[0].shape)
+        print('pre data shape',data[1].shape)
         data = np.concatenate(data, axis=-1)  # concatenate all channels
+        print("data shape", data.shape)
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
@@ -268,7 +283,7 @@ class BaseLoader(Dataset):
 
         return frames_clips, bvps_clips
 
-    def face_detection(self, frame, use_larger_box=False, larger_box_coef=1.0):
+    def face_detection(self, frame, use_larger_box=False, larger_box_coef=1.0, method="opencv"):
         """Face detection on a single frame.
 
         Args:
@@ -279,6 +294,7 @@ class BaseLoader(Dataset):
             face_box_coor(List[int]): coordinates of face bouding box.
         """
 
+        # if method == "opencv":
         detector = cv2.CascadeClassifier(
            './dataset/haarcascade_frontalface_default.xml')
         face_zone = detector.detectMultiScale(frame)
@@ -297,6 +313,24 @@ class BaseLoader(Dataset):
             face_box_coor[2] = larger_box_coef * face_box_coor[2]
             face_box_coor[3] = larger_box_coef * face_box_coor[3]
         return face_box_coor
+        # elif method == 'dlib':
+        #     detector = dlib.get_frontal_face_detector()
+        #     dets, scores, idx = detector(frame, 1, 1)
+        #     if len(dets) < 1:
+        #         print("ERROR: No Face Detected")
+        #         face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
+        #     elif len(dets) >= 2:
+        #         index_max = scores.index(max(scores))
+        #         det = dets[index_max]
+        #         face_box_coor = det
+        #     else:
+        #         face_box_coor = dets[0]
+        #     if use_larger_box:
+        #         face_box_coor[0] = max(0, face_box_coor[0] - (larger_box_coef - 1.0) / 2 * face_box_coor[2])
+        #         face_box_coor[1] = max(0, face_box_coor[1] - (larger_box_coef - 1.0) / 2 * face_box_coor[3])
+        #         face_box_coor[2] = larger_box_coef * face_box_coor[2]
+        #         face_box_coor[3] = larger_box_coef * face_box_coor[3]
+
 
     def crop_face_resize(self, frames, use_face_detection, use_larger_box, larger_box_coef, use_dynamic_detection,
                          detection_freq, use_median_box, width, height):
@@ -422,7 +456,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=4):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=16):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -584,6 +618,25 @@ class BaseLoader(Dataset):
         label = label / np.std(label)
         label[np.isnan(label)] = 0
         return label
+
+    @staticmethod
+    def skin_segment_data(data):
+        "Use bob skinfilter package to get the skin segmentation used in rPPGnet"
+        from bob.ip.skincolorfilter import SkinColorFilter
+        n, h, w, c = data.shape
+        skin_mask = np.zeros((n, h, w), dtype=np.bool)
+        skin_filter = SkinColorFilter()
+        skin_filter.estimate_gaussian_parameters(np.moveaxis(data[0,:,:,:], -1, 0))
+        for i in range(n):
+            frame = data[i, :, :, :]
+            frame = np.moveaxis(frame, -1, 0)
+            skin_mask[i,:,:] =  skin_filter.get_skin_mask(frame, 0.3)
+        n, h, w = skin_mask.shape
+        skin_mask = skin_mask.reshape((n, h, w, 1))
+        print("skin shape",skin_mask.shape)
+        return skin_mask
+
+    # face_image = numpy.moveaxis(face_image, -1, 0)
 
     @staticmethod
     def resample_ppg(input_signal, target_length):
