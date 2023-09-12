@@ -98,7 +98,7 @@ class PhysnetTrainer(pl.LightningModule):
                             torch.std(BVP_label)  # normalize
         loss_ecg = self.loss_model(rPPG, BVP_label)
         self.log("val_loss", loss_ecg, on_step=True, on_epoch=True)
-        return np.mean(valid_loss)
+        return loss_ecg
 
     def test_step(self, batch, batch_idx):
         """ Runs the model on test sets."""
