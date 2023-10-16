@@ -3,3 +3,5 @@ import neural_methods.trainer.PhysnetTrainer
 import neural_methods.trainer.TscanTrainer
 import neural_methods.trainer.DeepPhysTrainer
 import neural_methods.trainer.EfficientPhysTrainer
+import neural_methods.trainer.rPPGNetTrainer
+import neural_methods.trainer.PhysFormerTrainer

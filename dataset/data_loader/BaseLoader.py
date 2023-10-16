@@ -230,6 +230,7 @@ class BaseLoader(Dataset):
             bvps_clips(np.array): processed bvp (ppg) labels by frames
         """
         # resize frames and crop for face region
+        print("in inner loop")
         frames = self.crop_face_resize(
             frames,
             config_preprocess.CROP_FACE.DO_CROP_FACE,
@@ -262,9 +263,8 @@ class BaseLoader(Dataset):
             else:
                 raise ValueError("Unsupported data type!")
         print('pre data shape',data[0].shape)
-        print('pre data shape',data[1].shape)
         data = np.concatenate(data, axis=-1)  # concatenate all channels
-        print("data shape", data.shape)
+        # print("data shape", data.shape)
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
@@ -280,7 +280,7 @@ class BaseLoader(Dataset):
         else:
             frames_clips = np.array([data])
             bvps_clips = np.array([bvps])
-
+        print('exit inner loop')
         return frames_clips, bvps_clips
 
     def face_detection(self, frame, use_larger_box=False, larger_box_coef=1.0, method="opencv"):
@@ -352,6 +352,7 @@ class BaseLoader(Dataset):
             resized_frames(list[np.array(float)]): Resized and cropped frames
         """
         # Face Cropping
+        print("in crop face")
         if use_dynamic_detection:
             num_dynamic_det = ceil(frames.shape[0] / detection_freq)
         else:
@@ -385,6 +386,7 @@ class BaseLoader(Dataset):
                 frame = frame[max(face_region[1], 0):min(face_region[1] + face_region[3], frame.shape[0]),
                         max(face_region[0], 0):min(face_region[0] + face_region[2], frame.shape[1])]
             resized_frames[i] = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+        print('exit crop face')
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):

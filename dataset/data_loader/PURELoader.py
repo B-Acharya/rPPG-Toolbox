@@ -117,11 +117,14 @@ class PURELoader(BaseLoader):
         """ Invoked by preprocess_dataset for multi_process. """
         filename = os.path.split(data_dirs[i]['path'])[-1]
         saved_filename = data_dirs[i]['index']
+        print('start with pre-process')
 
         if 'None' in config_preprocess.DATA_AUG:
+            print('reading video')
             # Utilize dataset-specific function to read video
             frames = self.read_video(
                 os.path.join(data_dirs[i]['path'], ""))
+            print('done reading video')
         elif 'Motion' in config_preprocess.DATA_AUG:
             # Utilize general function to read video in .npy format
             frames = self.read_npy_video(
@@ -139,10 +142,13 @@ class PURELoader(BaseLoader):
         # if config_preprocess.TRIM:
         #     frames = frames[:1800]
         #     bvps = bvps[:1800]
+        print("entering self.preprocess")
         frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
+        print('done with pre-process')
 
         input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
         file_list_dict[i] = input_name_list
+        print('exit pre-process')
 
     @staticmethod
     def read_video(video_file):

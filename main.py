@@ -15,6 +15,7 @@ import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
+import matplotlib.pyplot as plt
 
 RANDOM_SEED = 100
 torch.manual_seed(RANDOM_SEED)
@@ -89,10 +90,8 @@ def train_and_test(config, data_loader_dict):
     }
 
     comet_logger.log_hyperparams(hyper_parameters)
-    comet_logger.experiment.add_tags([config.MODEL.NAME, config.TRAIN.DATA.DATASET, config.TRAIN.DATA.PREPROCESS.LABEL_TYPE])
+    comet_logger.experiment.add_tags(["final",config.MODEL.NAME,config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET, config.TRAIN.DATA.PREPROCESS.LABEL_TYPE])
     comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
-    comet_logger.experiment.add_tag(config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH)
-    comet_logger.experiment.add_tag("Batch_size:" + str(config.TRAIN.BATCH_SIZE))
 
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
@@ -102,6 +101,10 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.EfficientPhysTrainer.EfficientPhysTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'DeepPhys':
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'rPPGNet':
+        model_trainer = trainer.rPPGNetTrainer.rPPGNetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'PhysFormer':
+        model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
 
@@ -126,11 +129,27 @@ def train_and_test(config, data_loader_dict):
             comet_logger.experiment.add_tag("Early_stopping")
             trainer_light= pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
         else:
-            # trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
-            #trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            #trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            # trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+
 
             #Slurm settings
-            trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp', accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp_find_unused_parameters_true', accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+
+            #finding the best LR
+            # from lightning.pytorch.tuner import Tuner
+            # tuner = Tuner(trainer_light)
+            # lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
+            # fig = lr_finder.plot(suggest=True)
+            # comet_logger.experiment.log_figure(figure=fig, figure_name="Lr-curve")
+            # plt.close()
+            # #
+            # new_lr = lr_finder.suggestion()
+            # model_trainer.lr = new_lr
+            # comet_logger.experiment.add_tags(
+            #     ['lr-finder'])
+            # print(model_trainer.lr)
+
 
         trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
 
@@ -208,7 +227,7 @@ if __name__ == "__main__":
     print(config, end='\n\n')
     global CONFIG_FILE_NAME
     CONFIG_FILE_NAME = args.config_file
-    data_loader_dict = dict() # dictionary of data loaders 
+    data_loader_dict = dict() # dictionary of data loaders
     if config.TOOLBOX_MODE == "train_and_test":
         # train_loader
         if config.TRAIN.DATA.DATASET == "UBFC":
@@ -225,6 +244,8 @@ if __name__ == "__main__":
             train_loader = data_loader.CMBPLoader.CMBPLoader
         elif config.TRAIN.DATA.DATASET == "VIPL":
             train_loader = data_loader.VIPLLoader.VIPLLoader
+        elif config.TRAIN.DATA.DATASET == "COHFACE":
+            train_loader = data_loader.COHFACELoader.COHFACELoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
@@ -262,6 +283,8 @@ if __name__ == "__main__":
             valid_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
         elif config.VALID.DATA.DATASET == "VIPL":
             valid_loader = data_loader.VIPLLoader.VIPLLoader
+        elif config.VALID.DATA.DATASET == "COHFACE":
+            valid_loader = data_loader.COHFACELoader.COHFACELoader
         elif config.VALID.DATA.DATASET is None and not config.TEST.USE_LAST_EPOCH:
                 raise ValueError("Validation dataset not specified despite USE_LAST_EPOCH set to False!")
         else:
@@ -301,6 +324,8 @@ if __name__ == "__main__":
             test_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
         elif config.TEST.DATA.DATASET == "VIPL":
             test_loader = data_loader.VIPLLoader.VIPLLoader
+        elif config.TEST.DATA.DATASET == "COHFACE":
+            test_loader = data_loader.COHFACELoader.COHFACELoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
