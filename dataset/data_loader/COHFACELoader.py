@@ -20,7 +20,7 @@ from dataset.data_loader.BaseLoader import BaseLoader
 class COHFACELoader(BaseLoader):
     """The data loader for the COHFACE dataset."""
 
-    def __init__(self, name, data_path, config_data):
+    def __init__(self, name, data_path, config_data, model):
         """Initializes an COHFACE dataloader.
             Args:
                 data_path(str): path of a folder which stores raw video and bvp data.
@@ -60,7 +60,7 @@ class COHFACELoader(BaseLoader):
         else:
             self.use_predefined_splits = True
 
-        super().__init__(name, data_path, config_data)
+        super().__init__(name, data_path, config_data, model)
 
     def _read_split_path(self):
         data_paths = []

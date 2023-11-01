@@ -4,11 +4,11 @@ TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 40
   LR: 9e-3
-  MODEL_FILE_NAME: COHFACE_COHFACE_COHFACE_physnet
+  MODEL_FILE_NAME: COHFACE_COHFACE_COHFACE_diff_diff
   DATA:
     FS: 20
     DATASET: COHFACE
-    DO_PREPROCESS:  True # if first time, should be true
+    DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -17,17 +17,17 @@ TRAIN:
     BEGIN: 0.0
     END: 0.8
     PREPROCESS:
-      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
+      DATA_TYPE: [ 'DiffNormalized' ]
       DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 128
       CROP_FACE:
-        DO_CROP_FACE: False
+        DO_CROP_FACE: True
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY: 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
@@ -38,7 +38,7 @@ VALID:
   DATA:
     FS: 20
     DATASET: COHFACE
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -47,16 +47,16 @@ VALID:
     BEGIN: 0.8
     END: 0.9
     PREPROCESS:
-      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
+      DATA_TYPE: [ 'DiffNormalized' ]
       LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 128
       CROP_FACE:
-        DO_CROP_FACE: False
+        DO_CROP_FACE: True
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
@@ -68,7 +68,7 @@ TEST:
   DATA:
     FS: 20
     DATASET: COHFACE
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -77,16 +77,16 @@ TEST:
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
-      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
+      DATA_TYPE: [ 'DiffNormalized' ]
       LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 128
       CROP_FACE:
-        DO_CROP_FACE: False
+        DO_CROP_FACE: True
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:

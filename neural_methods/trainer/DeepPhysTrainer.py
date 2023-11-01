@@ -34,7 +34,7 @@ class DeepPhysTrainer(pl.LightningModule):
         self.predictions = dict()
         self.labels = dict()
 
-        if config.TOOLBOX_MODE == "train_and_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
             self.model = DeepPhys(img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 
@@ -147,10 +147,14 @@ class DeepPhysTrainer(pl.LightningModule):
         optimizer = optim.AdamW(
             self.parameters(), lr=self.lr, weight_decay=0)
 
+        # optimizer = optim.Adadelta(
+        #     self.parameters(), lr=self.lr, weight_decay=0)
+
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
         return [optimizer], scheduler
+        # return optimizer
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):

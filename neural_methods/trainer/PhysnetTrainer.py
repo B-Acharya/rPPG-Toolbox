@@ -37,7 +37,7 @@ class PhysnetTrainer(pl.LightningModule):
         self.model = PhysNet_padding_Encoder_Decoder_MAX(
             frames=config.MODEL.PHYSNET.FRAME_NUM).to(self.device)  # [3, T, 128,128]
 
-        if config.TOOLBOX_MODE == "train_and_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
             self.num_train_batches = len(data_loader["train"])
             self.loss_model = Neg_Pearson()
             # self.optimizer = optim.Adam(
@@ -57,6 +57,7 @@ class PhysnetTrainer(pl.LightningModule):
 
         running_loss = 0.0
         train_loss = []
+        print("Nan check",torch.all(batch[0].isnan()==False))
         rPPG, x_visual, x_visual3232, x_visual1616 = self.model(
                     batch[0].to(torch.float32).to(self.device))
         BVP_label = batch[1].to(
@@ -66,7 +67,7 @@ class PhysnetTrainer(pl.LightningModule):
                             torch.std(BVP_label)  # normalize
         loss = self.loss_model(rPPG, BVP_label)
         running_loss += loss.item()
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         #     if not self.config.TEST.USE_LAST_EPOCH:
         #         valid_loss = self.valid(data_loader)
         #         print('validation loss: ', valid_loss)
@@ -97,7 +98,7 @@ class PhysnetTrainer(pl.LightningModule):
         BVP_label = (BVP_label - torch.mean(BVP_label)) / \
                             torch.std(BVP_label)  # normalize
         loss_ecg = self.loss_model(rPPG, BVP_label)
-        self.log("val_loss", loss_ecg, on_step=True, on_epoch=True)
+        self.log("val_loss", loss_ecg, on_step=True, on_epoch=True, prog_bar=True)
         return loss_ecg
 
     def test_step(self, batch, batch_idx):

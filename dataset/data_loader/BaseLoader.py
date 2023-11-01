@@ -18,13 +18,53 @@ from unsupervised_methods.methods import POS_WANG
 from unsupervised_methods import utils
 import math
 from multiprocessing import Pool, Process, Value, Array, Manager
+from torchvision import transforms
 
 import cv2
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
-import matplotlib.pyplot as plt
+import random
+from scipy.signal import welch
+
+def get_hr(y, sr=30, min=30, max=180):
+    p, q = welch(y, sr, nfft=1e5 / sr, nperseg=np.min((len(y) - 1, 256)))
+    return p[(p > min / 60) & (p < max / 60)][np.argmax(q[(p > min / 60) & (p < max / 60)])] * 60
+
+
+class Normaliztion(object):
+    """
+        same as mxnet, normalize into [-1, 1]
+        image = (image - 127.5)/128
+    """
+
+    def __call__(self, video):
+        new_video_x = (video- 127.5) / 128
+        return new_video_x
+
+class RandomHorizontalFlip(object):
+    """Horizontally flip the given Image randomly with a probability of 0.5."""
+
+    def __call__(self, video):
+
+        h, w = video.shape[2], video.shape[3]
+        clip_frames = video.shape[1]
+        new_video_x = np.zeros((3,clip_frames, h, w))
+
+        p = random.random()
+        if p < 0.5:
+            # print('Flip')
+            for i in range(clip_frames):
+                # video
+                image = video[ :, i, :, :]
+                image = cv2.flip(image, 1)
+                new_video_x[:,i , :, :] = image
+            return new_video_x
+
+        else:
+                # print('no Flip')
+            return video
 
 
 class BaseLoader(Dataset):
@@ -43,7 +83,7 @@ class BaseLoader(Dataset):
             "--preprocess", default=None, action='store_true')
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data ):
+    def __init__(self, dataset_name, raw_data_path, config_data, model):
         """Inits dataloader with lists of files.
 
         Args:
@@ -62,6 +102,9 @@ class BaseLoader(Dataset):
         self.do_preprocess = config_data.DO_PREPROCESS
         self.loo = config_data.LOO
         self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
+        self.model = model
+        if model == "PhysFormer":
+            self.transform = transforms.Compose([Normaliztion(), RandomHorizontalFlip()])
         if self.loo:
             self.participant_ids = config_data.PARTICIPANT_IDS
 
@@ -118,7 +161,75 @@ class BaseLoader(Dataset):
         # chunk_id is the extracted, numeric chunk identifier. Following the previous comments, 
         # the chunk_id for example would be 0
         chunk_id = item_path_filename[split_idx + 6:].split('.')[0]
+        if self.model == "PhysFormer":
+
+            clip_average_HR = get_hr(label)
+
+            p = random.random()
+
+            #TODO: check the implementation for up and down sampling turned off with 0
+            if p < 0:  # sampling aug     p < 0.5
+                #augment the video
+                data, label, clip_average_HR =self.get_single_video_x_aug(data, label, clip_average_HR)
+
+            if self.transform:
+                data = self.transform(data)
+
+            return data, label, filename, chunk_id, clip_average_HR
+
         return data, label, filename, chunk_id
+
+    def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
+
+        clip_frames = data.shape[0]
+        data_x = np.zeros((clip_frames, 128, 128, 3))
+        label_new = np.zeros(clip_frames)
+
+        size_crop = np.random.randint(16)
+
+        if clip_average_HR > 88:  # halve
+            clip_average_HR = clip_average_HR / 2
+            for tt in range(clip_frames-1):
+                if tt % 2 == 0:
+                    image_id = tt // 2
+                    tmp_image = data[image_id]
+                    label_new[tt] = ecg_label[tt // 2]
+
+                else:
+                    image_id1 = tt // 2
+                    image_id2 = image_id1 + 1
+                    tmp_image1 = data[image_id1]
+                    tmp_image2 = data[image_id2]
+
+                    tmp_image = tmp_image1 // 2 + tmp_image2 // 2  # mean linear interpolation
+                    label_new[tt] = ecg_label[tt // 2] / 2 + ecg_label[tt // 2 + 1] / 2
+
+                tmp_image = cv2.resize(tmp_image, (128 + size_crop, 128 + size_crop), interpolation=cv2.INTER_CUBIC)[
+                            (size_crop // 2):(128 + size_crop // 2), (size_crop // 2):(128 + size_crop // 2), :]
+
+                image_x_aug = tmp_image
+                data_x[tt, :, :, :] = image_x_aug
+
+
+        else:  # double
+            clip_average_HR = clip_average_HR * 2
+            for tt in range(clip_frames):
+                image_id = tt * 2
+                tmp_image = data[image_id]
+
+                tmp_image = cv2.resize(tmp_image, (128 + size_crop, 128 + size_crop), interpolation=cv2.INTER_CUBIC)[
+                            (size_crop // 2):(128 + size_crop // 2), (size_crop // 2):(128 + size_crop // 2), :]
+
+                image_x_aug = tmp_image
+                data_x[tt, :, :, :] = image_x_aug
+
+                # approximation
+                if tt < 80:
+                    label_new[tt] = ecg_label[tt * 2]
+                else:
+                    label_new[tt] = label_new[tt - 80]
+
+        return data_x, label_new, clip_average_HR
 
     def get_raw_data(self, raw_data_path):
         """Returns raw data directories under the path.
@@ -230,7 +341,6 @@ class BaseLoader(Dataset):
             bvps_clips(np.array): processed bvp (ppg) labels by frames
         """
         # resize frames and crop for face region
-        print("in inner loop")
         frames = self.crop_face_resize(
             frames,
             config_preprocess.CROP_FACE.DO_CROP_FACE,
@@ -458,7 +568,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=16):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:

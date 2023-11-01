@@ -121,5 +121,10 @@ class TorchLossComputer(object):
 
         whole_max_val, whole_max_idx = ca.view(-1).max(0)
         whole_max_idx = whole_max_idx.type(torch.float)
-        return loss_distribution_kl, F.cross_entropy(ca, (target - bpm_range[0]).view(1).type(torch.long)), torch.abs(
+        #edited to get the right label if the target in < 40
+        if (target - bpm_range[0].view(1).type(torch.long) < 0) :
+            return loss_distribution_kl, F.cross_entropy(ca, (target).view(1).type(torch.long)), torch.abs(
+                target[0] - bpm_range[0] - whole_max_idx)
+        else:
+            return loss_distribution_kl, F.cross_entropy(ca, (target - bpm_range[0]).view(1).type(torch.long)), torch.abs(
             target[0] - bpm_range[0] - whole_max_idx)

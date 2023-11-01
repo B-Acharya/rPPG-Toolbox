@@ -1,14 +1,14 @@
 BASE: ['']
-TOOLBOX_MODE: "preprocess"      # "train_and_test"  or "only_test"
+TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 40
   LR: 9e-3
-  MODEL_FILE_NAME: PURE_PURE_PURE_deepphys_loo_preprocess
+  MODEL_FILE_NAME: PURE_PURE_PURE_deepphys_LOO
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -96,6 +96,7 @@ LOG:
 MODEL:
   DROP_RATE: 0.2
   NAME: DeepPhys
+  MODEL_DIR: "/data/rppg_14_pure_video_nt_lab/processed/Models"
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"

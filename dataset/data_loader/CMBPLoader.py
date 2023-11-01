@@ -57,7 +57,7 @@ class CMBPLoader(BaseLoader):
     """
 
 
-    def __init__(self, name, data_path, config_data):
+    def __init__(self, name, data_path, config_data, model):
         """Initializes an UBFC dataloader.
             Args:
                 data_path(str): path of a folder which stores raw video and bvp data.
@@ -65,7 +65,7 @@ class CMBPLoader(BaseLoader):
                 name(string): name of the dataloader.
                 config_data(CfgNode): data settings(ref:config.py).
         """
-        super().__init__(name, data_path, config_data)
+        super().__init__(name, data_path, config_data, model)
 
     def get_raw_data(self, data_path):
         """Returns data directories under the path(For UBFC dataset)."""
@@ -79,13 +79,16 @@ class CMBPLoader(BaseLoader):
         data_dirs = sorted(_temp)
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
-        if len(data_dirs) != 80:
-            raise ValueError("Some files are missing")
+        # if len(data_dirs) != 80:
+        #     raise ValueError("Some files are missing")
         print(len(data_dirs))
         dirs = list()
         for data_dir in data_dirs:
-            subject = data_dir.parent.stem.strip("p")
-            index = subject + data_dir.stem.strip("p")
+            # subject = data_dir.parent.stem.strip("p")
+            # index = subject + data_dir.stem.strip("p")
+            subject = data_dir.parent.stem
+            index = subject + "_" + data_dir.stem
+
             dirs.append({"index":index, "subject":subject, "path":str(data_dir)})
         return dirs
 
@@ -110,32 +113,38 @@ class CMBPLoader(BaseLoader):
 
         video_path = data_dirs[i]['path']
         setting = saved_filename[-1]
-
         #different setting have different file names
         if setting == '0':
-           video_filename = "HRNR_HIGH.MOV"
+           video_filename = "LowHR-Bright.MOV"
         elif setting == '1':
-            video_filename = "HRNR_LOW.MOV"
+            video_filename = "LowHR-Dark.MOV"
         elif setting == '2':
-            video_filename = "HREL_LOW.MOV"
+            video_filename = "HighHR-Dark.MOV"
         elif setting == '3':
-            video_filename = "HREL_HIGH.MOV"
+            video_filename = "HighHR-Bright.MOV"
 
+        print("os path exists", os.path.exists(os.path.join(video_path, video_filename)))
+        print("data path exists", os.path.exists(os.path.join(video_path, "data.hdf5")))
         frames = self.read_video(
             os.path.join(video_path, video_filename))
         bvps = self.read_wave(
             os.path.join(video_path, "data.hdf5"))
 
+        print("frame shape",frames.shape)
+        print("bvps shape", bvps.shape)
+
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
 
         frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
+        print("saving", saved_filename)
         input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
         file_list_dict[i] = input_name_list
 
     @staticmethod
     def read_video(video_file):
         """Reads a video file, returns frames(T, H, W, 3) """
+        print("enter read")
         VidObj = cv2.VideoCapture(video_file)
         VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
         success, frame = VidObj.read()
@@ -145,6 +154,7 @@ class CMBPLoader(BaseLoader):
             frame = np.asarray(frame)
             frames.append(frame)
             success, frame = VidObj.read()
+        print("exit read")
         return np.asarray(frames)
 
     @staticmethod

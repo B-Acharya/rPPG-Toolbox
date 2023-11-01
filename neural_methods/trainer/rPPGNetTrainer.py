@@ -37,7 +37,7 @@ class rPPGNetTrainer(pl.LightningModule):
         self.model = rPPGNet(
             frames=config.MODEL.PHYSNET.FRAME_NUM).to(self.device)  # [3, T, 128,128]
 
-        if config.TOOLBOX_MODE == "train_and_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
             self.num_train_batches = len(data_loader["train"])
             self.criterion = Neg_Pearson()
             self.skin_loss = torch.nn.BCELoss()

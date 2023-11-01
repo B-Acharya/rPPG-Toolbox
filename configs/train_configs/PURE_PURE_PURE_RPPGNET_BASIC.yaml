@@ -8,7 +8,7 @@ TRAIN:
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS:  False # if first time, should be true
+    DO_PREPROCESS:  True # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated

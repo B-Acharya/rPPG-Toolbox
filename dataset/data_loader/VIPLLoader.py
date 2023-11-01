@@ -67,7 +67,7 @@ class VIPLLoader(BaseLoader):
     """
 
 
-    def __init__(self, name, data_path,config_data, sources=None, scenarios=None ):
+    def __init__(self, name, data_path,config_data, model, sources=None, scenarios=None ):
         """Initializes an UBFC dataloader.
             Args:
                 data_path(str): path of a folder which stores raw video and bvp data.
@@ -86,7 +86,7 @@ class VIPLLoader(BaseLoader):
         else:
             self.scenarios = scenarios
 
-        super().__init__(name, data_path, config_data)
+        super().__init__(name, data_path, config_data, model)
 
     def get_raw_data(self, data_path):
         """Returns data directories under the path(For UBFC dataset)."""

@@ -5,17 +5,21 @@ import random
 import time
 
 import numpy as np
+import pandas as pd
 import torch
 from config import get_config
 from dataset import data_loader
 from neural_methods import trainer
-from unsupervised_methods.unsupervised_predictor import unsupervised_predict
+# from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.strategies import DDPStrategy
 import matplotlib.pyplot as plt
+import pathlib
+from sklearn.model_selection import KFold
 
 RANDOM_SEED = 100
 torch.manual_seed(RANDOM_SEED)
@@ -33,6 +37,10 @@ general_generator.manual_seed(RANDOM_SEED)
 train_generator = torch.Generator()
 train_generator.manual_seed(RANDOM_SEED)
 torch.set_float32_matmul_precision("high")
+
+#to get accurate stack
+# import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 
 def seed_worker(worker_id):
@@ -66,32 +74,9 @@ def add_args(parser):
     '''
     return parser
 
+def LOO(comet_logger, config, data_loader_dict):
+    """trains the model."""
 
-def train_and_test(config, data_loader_dict):
-    """Trains the model."""
-
-    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-        project_name="rppg",
-        workspace="b-acharya",
-        experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-        log_code=False
-    )
-    # Overfitting testing
-    # comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-    #     project_name="rppg",
-    #     workspace="b-acharya",
-    #     experiment_name= "overfit-testing",
-    #     log_code=False
-    # )
-    # comet_logger.add_tag("train_validation_test")
-    hyper_parameters = {
-        "Learning_rate": config.TRAIN.LR,
-        "epochs": config.TRAIN.EPOCHS
-    }
-
-    comet_logger.log_hyperparams(hyper_parameters)
-    comet_logger.experiment.add_tags(["final",config.MODEL.NAME,config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET, config.TRAIN.DATA.PREPROCESS.LABEL_TYPE])
-    comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
 
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
@@ -104,16 +89,107 @@ def train_and_test(config, data_loader_dict):
     elif config.MODEL.NAME == 'rPPGNet':
         model_trainer = trainer.rPPGNetTrainer.rPPGNetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysFormer':
-        model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
+        model_trainer = trainer.PhysFormertrainer.PhysFormerTrainer(config, data_loader_dict)
     else:
-        raise ValueError('Your Model is Not Supported  Yet!')
+        raise ValueError('your model is not supported  yet!')
+
+        #create checkpoint every epoch and track the validation loss
+    checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
+                                              save_top_k=-1,
+                                              dirpath=config.MODEL.MODEL_DIR,
+                                              filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
+                                              monitor="val_loss_epoch",
+                                              mode='min')
+    if config.EARLY_STOPPING.TRAIN:
+        early_stop_callback = EarlyStopping(monitor="train_loss_epoch", min_delta=0.00, patience=3, verbose=False,
+                                                mode="min")
+        comet_logger.experiment.add_tag("early_stopping")
+        trainer_light= pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
+    else:
+        import os
+        os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+        # trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.model.model_dir, logger=comet_logger, max_epochs=config.train.epochs, callbacks=[checkpoint_callback])
+        #trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+        #slurm settings
+        #ddp_find was added for rppgnet
+        trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy=DDPStrategy(find_unused_parameters=True), accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+
+        #finding the best lr
+    from lightning.pytorch.tuner.tuning import Tuner
+    tuner = Tuner(trainer_light)
+    lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
+    fig = lr_finder.plot(suggest=True)
+    comet_logger.experiment.log_figure(figure=fig, figure_name="lr-curve")
+    plt.close()
+        # #
+    new_lr = lr_finder.suggestion()
+    model_trainer.lr = new_lr
+    comet_logger.experiment.add_tags(
+            ['lr-finder'])
+    print(model_trainer.lr)
+
+    trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
+
+        # #load and test the model on the best epoch / last epoch
+        # experiment_key = comet_logger.experiment.get_key()
+        # comet_logger = cometlogger(experiment_key=experiment_key)
+        # trainer_light = pl.trainer(logger=comet_logger)
+
+    if config.TEST.USE_LAST_EPOCH:
+        comet_logger.experiment.add_tag("last_epoch")
+        trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
+    else:
+        comet_logger.experiment.add_tag("best_epoch")
+        trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
+
+def train_and_test(config, data_loader_dict):
+    """trains the model."""
+
+    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+        project_name="rppg-lr-finder",
+        workspace="b-acharya",
+        #experiment_name= f"{config.model.name}_{config.train.data.dataset}_{config.valid.data.dataset}_{config.test.data.dataset}",
+        experiment_name= f"{config.TRAIN.MODEL_FILE_NAME}",
+        log_code=False
+    )
+    # overfitting testing
+    # comet_logger = cometlogger(api_key="v1x7oi9poirm8yze4prm2fpce",
+    #     project_name="rppg",
+    #     workspace="b-acharya",
+    #     experiment_name= "overfit-testing",
+    #     log_code=false
+    # )
+    # comet_logger.add_tag("train_validation_test")
+    hyper_parameters = {
+        "learning_rate": config.TRAIN.LR,
+        "epochs": config.TRAIN.EPOCHS
+    }
+
+    comet_logger.log_hyperparams(hyper_parameters)
+    # comet_logger.experiment.add_tags(["final",config.model.name,config.train.data.preprocess.chunk_length, config.train.data.dataset, config.train.data.preprocess.label_type])
+    comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+
+    if config.MODEL.NAME == "Physnet":
+        model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == "Tscan":
+        model_trainer = trainer.TscanTrainer.TscanTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == "Efficientphys":
+        model_trainer = trainer.EfficientPhystrainer.EfficientPhystrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'DeepPhys':
+        model_trainer = trainer.DeepphysTrainer.DeepphysTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'rPPGNet':
+        model_trainer = trainer.rPPGNetTrainer.rPPGNetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'physformer':
+        model_trainer = trainer.PhysformerTrainer.PhysformerTrainer(config, data_loader_dict)
+    else:
+        raise ValueError('your model is not supported  yet!')
 
     if config.TOOLBOX_MODE == "only_test":
-        # TODO: load the appropriate model with checkpoint path
-        # if not os.path.exists(self.config.INFERENCE.MODEL_PATH):
-        #     raise ValueError("Inference model path error! Please check INFERENCE.MODEL_PATH in your yaml.")
-        # self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH))
-        # print("Testing uses pretrained model!")
+        # todo: load the appropriate model with checkpoint path
+        # if not os.path.exists(self.config.inference.model_path):
+        #     raise valueerror("inference model path error! please check inference.model_path in your yaml.")
+        # self.model.load_state_dict(torch.load(self.config.inference.model_path))
+        # print("testing uses pretrained model!")
         pass
     else:
         #create checkpoint every epoch and track the validation loss
@@ -124,52 +200,51 @@ def train_and_test(config, data_loader_dict):
                                               monitor="val_loss_epoch",
                                               mode='min')
         if config.EARLY_STOPPING.TRAIN:
-            early_stop_callback = EarlyStopping(monitor="train_loss_epoch", min_delta=0.00, patience=3, verbose=False,
+            early_stop_callback = EarlyStopping(monitor="train_loss_epoch", min_delta=0.00, patience=3, verbose=false,
                                                 mode="min")
-            comet_logger.experiment.add_tag("Early_stopping")
-            trainer_light= pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
+            comet_logger.experiment.add_tag("early_stopping")
+            trainer_light= pl.trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
         else:
-            #trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
-            # trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            # trainer_light = pl.trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.model.model_dir, logger=comet_logger, max_epochs=config.train.epochs, callbacks=[checkpoint_callback])
+            #trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback], gradient_clip_val=0.5)
 
 
-            #Slurm settings
-            trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp_find_unused_parameters_true', accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            #slurm settings
+            trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp', accelerator='gpu', default_root_dir=config.model.model_dir, logger=comet_logger, max_epochs=config.train.epochs, callbacks=[checkpoint_callback])
 
-            #finding the best LR
-            # from lightning.pytorch.tuner import Tuner
-            # tuner = Tuner(trainer_light)
-            # lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
-            # fig = lr_finder.plot(suggest=True)
-            # comet_logger.experiment.log_figure(figure=fig, figure_name="Lr-curve")
-            # plt.close()
+            #finding the best lr
+            from lightning.pytorch.tuner.tuning import Tuner
+            tuner = Tuner(trainer_light)
+            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
+            fig = lr_finder.plot(suggest=True)
+            comet_logger.experiment.log_figure(figure=fig, figure_name="lr-curve")
+            plt.close()
             # #
-            # new_lr = lr_finder.suggestion()
-            # model_trainer.lr = new_lr
-            # comet_logger.experiment.add_tags(
-            #     ['lr-finder'])
-            # print(model_trainer.lr)
-
+            new_lr = lr_finder.suggestion()
+            model_trainer.lr = new_lr
+            comet_logger.experiment.add_tags(
+                 ['lr-finder'])
+            print(model_trainer.lr)
 
         trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
 
         # #load and test the model on the best epoch / last epoch
         # experiment_key = comet_logger.experiment.get_key()
-        # comet_logger = CometLogger(experiment_key=experiment_key)
-        # trainer_light = pl.Trainer(logger=comet_logger)
+        # comet_logger = cometlogger(experiment_key=experiment_key)
+        # trainer_light = pl.trainer(logger=comet_logger)
 
-        if config.TEST.USE_LAST_EPOCH:
-            comet_logger.experiment.add_tag("Last_epoch")
+        if config.test.use_last_epoch:
+            comet_logger.experiment.add_tag("last_epoch")
             trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
         else:
-            comet_logger.experiment.add_tag("Best_epoch")
+            comet_logger.experiment.add_tag("best_epoch")
             trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
 
 
 def test(config, data_loader_dict):
-    """Tests the model."""
-    if config.MODEL.NAME == "Physnet":
-        model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
+    """tests the model."""
+    if config.model.name == "physnet":
+        model_trainer = trainer.physnettrainer.physnettrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "Tscan":
         model_trainer = trainer.TscanTrainer.TscanTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "EfficientPhys":
@@ -256,14 +331,16 @@ if __name__ == "__main__":
             train_data_loader = train_loader(
                 name="train",
                 data_path=config.TRAIN.DATA.DATA_PATH,
-                config_data=config.TRAIN.DATA)
+                config_data=config.TRAIN.DATA,
+                model = config.MODEL.NAME
+            )
             data_loader_dict['train'] = DataLoader(
                 dataset=train_data_loader,
                 num_workers=16,
                 batch_size=config.TRAIN.BATCH_SIZE,
                 shuffle=True,
                 worker_init_fn=seed_worker,
-                generator=train_generator
+                generator=train_generator,
             )
         else:
             data_loader_dict['train'] = None
@@ -296,17 +373,22 @@ if __name__ == "__main__":
             valid_data = valid_loader(
                 name="valid",
                 data_path=config.VALID.DATA.DATA_PATH,
-                config_data=config.VALID.DATA)
+                config_data=config.VALID.DATA,
+                model = config.MODEL.NAME
+            )
             data_loader_dict["valid"] = DataLoader(
                 dataset=valid_data,
                 num_workers=16,
                 batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
                 shuffle=False,
                 worker_init_fn=seed_worker,
-                generator=general_generator
+                generator=general_generator,
             )
         else:
             data_loader_dict['valid'] = None
+
+    if config.TOOLBOX_MODE == "preprocess":
+            print("done with preprocessing")
 
     if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "only_test":
         # test_loader
@@ -338,14 +420,16 @@ if __name__ == "__main__":
             test_data = test_loader(
                 name="test",
                 data_path=config.TEST.DATA.DATA_PATH,
-                config_data=config.TEST.DATA)
+                config_data=config.TEST.DATA,
+                model=config.MODEL.NAME
+            )
             data_loader_dict["test"] = DataLoader(
                 dataset=test_data,
                 num_workers=16,
                 batch_size=config.INFERENCE.BATCH_SIZE,
                 shuffle=False,
                 worker_init_fn=seed_worker,
-                generator=general_generator
+                generator=general_generator,
             )
         else:
             data_loader_dict['test'] = None
@@ -399,6 +483,192 @@ if __name__ == "__main__":
             loo_loader = data_loader.CMBPLoader.CMBPLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
+
+
+    elif config.TOOLBOX_MODE == "LOO":
+        K_fold = 10
+        #train_loader
+        if config.TRAIN.DATA.DATASET == "UBFC":
+            loader = data_loader.UBFCLoader.UBFCLoader
+        elif config.TRAIN.DATA.DATASET == "PURE":
+            loader = data_loader.PURELoader.PURELoader
+            participants = np.arange(1, 11)
+        elif config.TRAIN.DATA.DATASET == "SCAMPS":
+            loader = data_loader.SCAMPSLoader.SCAMPSLoader
+        elif config.TRAIN.DATA.DATASET == "MMPD":
+            loader = data_loader.MMPDLoader.MMPDLoader
+        elif config.TRAIN.DATA.DATASET == "BP4DPlus":
+            loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
+        elif config.TRAIN.DATA.DATASET == "CMBP":
+            loader = data_loader.CMBPLoader.CMBPLoader
+            basepath = pathlib.Path(config.TRAIN.DATA.DATA_PATH)
+            import os
+            participants = [ name for name in os.listdir(str(basepath)) if os.path.isdir(os.path.join(basepath, name)) ]
+        elif config.TRAIN.DATA.DATASET == "VIPL":
+            loader = data_loader.VIPLLoader.VIPLLoader
+            participants = np.arange(1, 108)
+        elif config.TRAIN.DATA.DATASET == "COHFACE":
+            loader = data_loader.COHFACELoader.COHFACELoader
+            participants = np.arange(1, 41)
+        else:
+            raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
+
+        #Initial processing of Dataset
+        if (config.TRAIN.DATA.DATASET and config.TRAIN.DATA.DATA_PATH):
+
+            train_data_loader = loader(
+                name="train",
+                data_path=config.TRAIN.DATA.DATA_PATH,
+                config_data=config.TRAIN.DATA,
+                model = config.MODEL.NAME
+            )
+            data_loader_dict['train'] = DataLoader(
+                dataset=train_data_loader,
+                num_workers=16,
+                batch_size=config.TRAIN.BATCH_SIZE,
+                shuffle=True,
+                worker_init_fn=seed_worker,
+                generator=train_generator,
+            )
+        else:
+            raise NotImplementedError
+
+        kf = KFold(n_splits=K_fold)
+        file_list_path = config.TRAIN.DATA.FILE_LIST_PATH
+        list_file = pd.read_csv(file_list_path)
+
+        def get_participant_index(pathfile):
+            "Pandas parsing for geting the index from the full path"
+            if "CMBP" in pathfile:
+                path = pathfile.split("/")[-1]
+                index = path = path.split("_")[0]
+                return index
+
+            else:
+                path = pathfile.split("/")[-1]
+                if "v" in path:
+                    index = path.split("v")[0]
+                    return int(index)
+                elif "_" in path:
+                    index = path.split("_")[0]
+                    if len(index) == 3:
+                        return int(index[0])
+                    else:
+                        return int(index[:2])
+
+
+        list_file['id'] = list_file['input_files'].apply(get_participant_index)
+
+        def create_path_list(listdf, train, test, i):
+            train_df = listdf[listdf['id'].isin(train)]
+            test_df = listdf[listdf['id'].isin(test)]
+            train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_train.csv"
+            test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_test.csv"
+            train_df.to_csv(str(train_path))
+            test_df.to_csv(str(test_path))
+            return train_path, test_path
+
+        for i, (train_index, test_index) in enumerate(kf.split(participants)):
+
+            if config.TRAIN.DATA.DATASET == "CMBP":
+                train_participants = [participants[i] for i in train_index]
+                test_participants = [participants[i] for i in test_index]
+                train_path, test_path = create_path_list(list_file, train_participants, test_participants, i)
+            else:
+                train_path, test_path = create_path_list(list_file, participants[train_index], participants[test_index], i)
+            print(train_path, test_path)
+            train_df = pd.read_csv(train_path)
+            test_df = pd.read_csv(test_path)
+
+            config.defrost()
+            config.TRAIN.DATA.FILE_LIST_PATH = str(train_path)
+            config.VALID.DATA.FILE_LIST_PATH = str(test_path)
+            config.TEST.DATA.FILE_LIST_PATH = str(test_path)
+            config.TRAIN.DATA.DO_PREPROCESS = False
+            config.VALID.DATA.DO_PREPROCESS = False
+            config.TEST.DATA.DO_PREPROCESS = False
+            config.freeze()
+
+            comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                       project_name="Leave-One-Out",
+                                       workspace="b-acharya",
+                                       #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
+                                       experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_LOO__FOLD_{i}",
+                                       log_code=False
+                                       )
+            hyper_parameters = {
+                "Learning_rate": config.TRAIN.LR,
+                "epochs": config.TRAIN.EPOCHS
+            }
+
+            comet_logger.log_hyperparams(hyper_parameters)
+            comet_logger.experiment.add_tags(
+                [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+                 config.TRAIN.DATA.PREPROCESS.LABEL_TYPE])
+            comet_logger.experiment.log_asset(train_path)
+            comet_logger.experiment.log_asset(test_path)
+            comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+
+            #ALL run on the same dataset and dont need a asepearte loader
+            train_data = loader(
+                name="train",
+                data_path=config.TRAIN.DATA.DATA_PATH,
+                config_data=config.TRAIN.DATA,
+                model = config.MODEL.NAME
+            )
+
+            #same as test data loader only difference is that paths
+            #Has left out set is used for both testing and validation
+            valid_data = loader(
+                name="valid",
+                data_path=config.VALID.DATA.DATA_PATH,
+                config_data=config.VALID.DATA,
+                model = config.MODEL.NAME
+            )
+
+            test_data = loader(
+                name="test",
+                data_path=config.TEST.DATA.DATA_PATH,
+                config_data=config.TEST.DATA,
+                model=config.MODEL.NAME
+            )
+
+            data_loader_dict['train'] = DataLoader(
+                dataset=train_data,
+                num_workers=16,
+                batch_size=config.TRAIN.BATCH_SIZE,
+                shuffle=True,
+                worker_init_fn=seed_worker,
+                generator=train_generator,
+            )
+            data_loader_dict["valid"] = DataLoader(
+                dataset=valid_data,
+                num_workers=16,
+                batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
+                shuffle=False,
+                worker_init_fn=seed_worker,
+                generator=general_generator,
+            )
+
+            data_loader_dict["test"] = DataLoader(
+                dataset=test_data,
+                num_workers=16,
+                batch_size=config.INFERENCE.BATCH_SIZE,
+                shuffle=False,
+                worker_init_fn=seed_worker,
+                generator=general_generator,
+            )
+
+            LOO(comet_logger, config, data_loader_dict)
+
+
+
+
+
+
+
+
+
     else:
         raise ValueError("Unsupported toolbox_mode! Currently support train_and_test or only_test or unsupervised_method.")
 

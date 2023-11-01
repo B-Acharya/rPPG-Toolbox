@@ -7,6 +7,7 @@ import torch.optim as optim
 from evaluation.metrics import calculate_metrics
 from neural_methods.loss.PhysFormerLossComputer import TorchLossComputer
 from neural_methods.model.PhysFormer import ViT_ST_ST_Compact3_TDC_gra_sharp
+from neural_methods.loss.PhysNetNegPearsonLoss import Neg_Pearson
 import lightning.pytorch as pl
 from scipy.signal import welch
 import math
@@ -33,6 +34,7 @@ class PhysFormerTrainer(pl.LightningModule):
         self.chunk_len = config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH
         self.frame_rate = config.TRAIN.DATA.FS
         self.config = config
+        self.lr = config.TRAIN.LR
         self.min_valid_loss = None
         self.best_epoch = 0
 
@@ -51,7 +53,7 @@ class PhysFormerTrainer(pl.LightningModule):
 
         self.hrs = []
 
-        if config.TOOLBOX_MODE == "train_and_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
             self.model = ViT_ST_ST_Compact3_TDC_gra_sharp(
                 image_size=(
                     self.chunk_len, config.TRAIN.DATA.PREPROCESS.RESIZE.H, config.TRAIN.DATA.PREPROCESS.RESIZE.W),
@@ -62,6 +64,7 @@ class PhysFormerTrainer(pl.LightningModule):
             self.criterion_reg = torch.nn.MSELoss()
             self.criterion_L1loss = torch.nn.L1Loss()
             self.criterion_class = torch.nn.CrossEntropyLoss()
+            self.criterion_Pearson = Neg_Pearson()
 
         elif config.TOOLBOX_MODE == "only_test":
             pass
@@ -74,7 +77,9 @@ class PhysFormerTrainer(pl.LightningModule):
             raise ValueError("No data for train")
 
 
-        hr = torch.tensor([self.get_hr(i) for i in batch[1]]).float().to(self.device)
+        hr_old = torch.tensor([self.get_hr(i.cpu()) for i in batch[1]]).float().to(self.device)
+        hr = torch.tensor([i for i in batch[-1]]).to(self.device)
+        print(hr, hr_old)
         data, label = batch[0].float().to(self.device), batch[1].float().to(self.device)
 
         gra_sharp = 2.0
@@ -117,9 +122,9 @@ class PhysFormerTrainer(pl.LightningModule):
         self.loss_rPPG_avg.append(float(loss_rPPG.data))
         self.loss_peak_avg.append(float(fre_loss.data))
         self.loss_kl_avg_test.append(float(kl_loss.data))
-        self.oss_hr_mae.append(float(train_mae))
+        self.loss_hr_mae.append(float(train_mae))
         if batch_idx % 100 == 99:  # print every 100 mini-batches
-            print(f'\nepoch:{self.current_epoch}, batch:{batch_idx+ 1}, total:{len(self.data_loader["train"]) // self.batch_size}, '
+            print(f'\nepoch:{self.current_epoch}, batch:{batch_idx+ 1}, total:{self.num_train_batches // self.batch_size}, '
                   f'lr:0.0001, sharp:{gra_sharp:.3f}, a:{a:.3f}, NegPearson:{np.mean(self.loss_rPPG_avg[-2000:]):.4f}, '
                   f'\nb:{b:.3f}, kl:{np.mean(self.loss_kl_avg_test[-2000:]):.3f}, fre_CEloss:{np.mean(self.loss_peak_avg[-2000:]):.3f}, '
                   f'hr_mae:{np.mean(self.loss_hr_mae[-2000:]):.3f}')
@@ -154,12 +159,13 @@ class PhysFormerTrainer(pl.LightningModule):
              self.hrs.append((self.get_hr(_1.cpu().detach().numpy()), self.get_hr(_2.cpu().detach().numpy())))
 
         loss_rPPG = self.criterion_Pearson(rPPG, label)
+        self.log("val_loss", loss_rPPG, on_step=True ,on_epoch=True, batch_size=self.batch_size)
 
         return loss_rPPG
 
     def on_validation_epoch_end(self) -> None:
         RMSE = np.mean([(i - j) ** 2 for i, j in self.hrs]) ** 0.5
-        self.log("val_rmse", RMSE, on_step=True, on_epoch=True, batch_size=self.batch_size)
+        self.log("val_rmse", RMSE,  on_epoch=True, batch_size=self.batch_size)
         self.hrs = []
 
     def test_step(self, batch, batch_idx):
@@ -221,7 +227,7 @@ class PhysFormerTrainer(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=0.00005)
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=50, gamma=0.5)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
         return [optimizer], scheduler
 
     def save_model(self, index):

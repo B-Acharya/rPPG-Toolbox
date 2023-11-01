@@ -4,11 +4,11 @@ TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 30
   LR: 9e-3
-  MODEL_FILE_NAME: PURE_PURE_UBFC_physnet_diffnormalized
+  MODEL_FILE_NAME: PURE_PURE_PURE_physnet_diff_diff
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS: False # if first time, should be true
+    DO_PREPROCESS: True # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -26,7 +26,7 @@ TRAIN:
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
@@ -36,7 +36,7 @@ VALID:
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS: False # if first time, should be true
+    DO_PREPROCESS: True # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -54,7 +54,7 @@ VALID:
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
@@ -66,7 +66,7 @@ TEST:
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS:  False # if first time, should be true
+    DO_PREPROCESS:  True # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -83,7 +83,7 @@ TEST:
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
-          DO_DYNAMIC_DETECTION: True
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
