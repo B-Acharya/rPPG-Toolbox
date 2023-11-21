@@ -104,7 +104,8 @@ def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=False, use_
     if use_bandpass:
         # bandpass filter between [0.75, 2.5] Hz
         # equals [45, 150] beats per min
-        [b, a] = butter(1, [0.75 / fs * 2, 2.5 / fs * 2], btype='bandpass')
+        #[b, a] = butter(1, [0.75 / fs * 2, 2.5 / fs * 2], btype='bandpass')
+        [b, a] = butter(1, [0.75 / fs * 2, 3 / fs * 2], btype='bandpass')
         predictions = scipy.signal.filtfilt(b, a, np.double(predictions))
         labels = scipy.signal.filtfilt(b, a, np.double(labels))
     if hr_method == 'FFT':
@@ -117,3 +118,24 @@ def calculate_metric_per_video(predictions, labels, fs=30, diff_flag=False, use_
         raise ValueError('Please use FFT or Peak to calculate your HR.')
     SNR = _calculate_SNR(predictions, hr_label, fs=fs)
     return hr_label, hr_pred, SNR
+
+def calculate_HR(bvp, fs=30, diff_flag=False, use_bandpass=True, hr_method='FFT'):
+
+    if diff_flag:  # if the predictions and labels are 1st derivative of PPG signal.
+        predictions = _detrend(np.cumsum(bvp), 100)
+    else:
+        predictions = _detrend(bvp, 100)
+    if use_bandpass:
+        # bandpass filter between [0.75, 2.5] Hz
+        # equals [45, 150] beats per min
+        print("using 2.5")
+        [b, a] = butter(1, [0.75 / fs * 2, 2.5 / fs * 2], btype='bandpass')
+        #[b, a] = butter(1, [0.75 / fs * 2, 3 / fs * 2], btype='bandpass')
+        predictions = scipy.signal.filtfilt(b, a, np.double(predictions))
+    if hr_method == 'FFT':
+        hr_pred = _calculate_fft_hr(predictions, fs=fs)
+    elif hr_method == 'Peak':
+        hr_pred = _calculate_peak_hr(predictions, fs=fs)
+    else:
+        raise ValueError('Please use FFT or Peak to calculate your HR.')
+    return hr_pred

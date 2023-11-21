@@ -11,6 +11,8 @@ class Neg_Pearson(nn.Module):  # Pearson range [-1, 1] so if < 0, abs|loss| ; if
 
     def forward(self, preds, labels):  # all variable operation
         loss = 0
+        assert not torch.any(torch.isnan(preds))
+        assert not torch.any(torch.isnan(labels))
         for i in range(preds.shape[0]):
             sum_x = torch.sum(preds[i])  # x
             sum_y = torch.sum(labels[i])  # y
@@ -19,13 +21,16 @@ class Neg_Pearson(nn.Module):  # Pearson range [-1, 1] so if < 0, abs|loss| ; if
             sum_y2 = torch.sum(torch.pow(labels[i], 2))  # y^2
             N = preds.shape[1]
             pearson = (N * sum_xy - sum_x * sum_y) / (
-                torch.sqrt((N * sum_x2 - torch.pow(sum_x, 2)) * (N * sum_y2 - torch.pow(sum_y, 2))))
-
+                torch.sqrt(torch.abs(((N * sum_x2 - torch.pow(sum_x, 2))+1e-5) * (N * sum_y2 - torch.pow(sum_y, 2))+ 1e-5) ))
+            pearson = torch.clamp(pearson, min=-1, max=1)
+            # if torch.any(torch.isnan(pearson)):
+            #     print("pearson",pearson)
+            #     print(preds)
+            #     print(labels)
             # if (pearson>=0).data.cpu().numpy():    # torch.cuda.ByteTensor -->  numpy
             #    loss += 1 - pearson
             # else:
             #    loss += 1 - torch.abs(pearson)
-
             loss += 1 - pearson
 
         loss = loss / preds.shape[0]

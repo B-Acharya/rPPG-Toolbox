@@ -4,6 +4,8 @@ import torch
 from evaluation.post_process import *
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from evaluation.BlandAltmanPy import BlandAltman
+
 
 
 def calcualte_mae_per_setting(dataframe):
@@ -107,6 +109,7 @@ def calculate_metrics(predictions, labels, config, logger):
         label = _reform_data_from_dict(labels[index])
 
         video_frame_size = prediction.shape[0]
+        print("Video frame size", video_frame_size, index)
         if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
             window_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE * config.TEST.DATA.FS
             if window_frame_size > video_frame_size:
@@ -154,6 +157,7 @@ def calculate_metrics(predictions, labels, config, logger):
                     logger.log_metrics({index:MAE} )
     log_HR_HR_plot(logger, predictions_dict)
     plot_bland(logger, predictions_dict)
+    filename_id = config.TRAIN.MODEL_FILE_NAME
 
     if config.INFERENCE.EVALUATION_METHOD == "FFT":
         gt_hr_fft_all = np.array(gt_hr_fft_all)
@@ -190,6 +194,21 @@ def calculate_metrics(predictions, labels, config, logger):
                 logger.log_metrics({"FFT SNR_FFT":Pearson_FFT, "FFT SNR std":standard_error})
             else:
                 raise ValueError("Wrong Test Metric Type")
+
+        compare = BlandAltman(gt_hr_fft_all, predict_hr_fft_all, config, logger=logger, averaged=True)
+        compare.scatter_plot(
+            x_label='GT PPG HR [bpm]',
+            y_label='rPPG HR [bpm]',
+            show_legend=True, figure_size=(5, 5),
+            the_title=f'{filename_id}_FFT_BlandAltman_ScatterPlot',
+            file_name=f'{filename_id}_FFT_BlandAltman_ScatterPlot.pdf')
+        compare.difference_plot(
+            x_label='Difference between rPPG HR and GT PPG HR [bpm]',
+            y_label='Average of rPPG HR and GT PPG HR [bpm]',
+            show_legend=True, figure_size=(5, 5),
+            the_title=f'{filename_id}_FFT_BlandAltman_DifferencePlot',
+            file_name=f'{filename_id}_FFT_BlandAltman_DifferencePlot.pdf')
+
     elif config.INFERENCE.EVALUATION_METHOD == "peak detection":
         gt_hr_peak_all = np.array(gt_hr_peak_all)
         predict_hr_peak_all = np.array(predict_hr_peak_all)
@@ -225,6 +244,7 @@ def calculate_metrics(predictions, labels, config, logger):
     if config.TEST.DATA.DATASET == "CMBP":
         result = {'LowHR_Bright': {}, 'LowHR_Dark': {}, 'HighHR_Dark': {}, 'HighHR_Bright': {}}
         for index in predictions_dict.keys():
+            print(index)
             HR_GT, HR_pred = predictions_dict[index]["GT_HR"], predictions_dict[index]["Pred_HR"]
 
             if index[-1] == "0":

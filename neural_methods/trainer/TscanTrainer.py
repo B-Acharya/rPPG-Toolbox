@@ -29,7 +29,8 @@ class TscanTrainer(pl.LightningModule):
         self.num_of_gpu = config.NUM_OF_GPU_TRAIN
         self.base_len = self.num_of_gpu * self.frame_depth
         self.chunk_len = config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH
-        self.config = config 
+        self.test_chunk_len = config.TEST.DATA.PREPROCESS.CHUNK_LENGTH
+        self.config = config
         self.min_valid_loss = None
         self.best_epoch = 0
         self.lr = config.TRAIN.LR
@@ -149,8 +150,8 @@ class TscanTrainer(pl.LightningModule):
             if subj_index not in self.predictions.keys():
                 self.predictions[subj_index] = dict()
                 self.labels[subj_index] = dict()
-            self.predictions[subj_index][sort_index] = pred_ppg_test[idx * self.chunk_len:(idx + 1) * self.chunk_len]
-            self.labels[subj_index][sort_index] = labels_test[idx * self.chunk_len:(idx + 1) * self.chunk_len]
+            self.predictions[subj_index][sort_index] = pred_ppg_test[idx * self.test_chunk_len:(idx + 1) * self.test_chunk_len]
+            self.labels[subj_index][sort_index] = labels_test[idx * self.test_chunk_len:(idx + 1) * self.test_chunk_len]
 
     def on_test_end(self) -> None:
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)

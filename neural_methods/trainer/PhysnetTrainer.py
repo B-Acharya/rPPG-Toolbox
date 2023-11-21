@@ -12,6 +12,8 @@ from neural_methods.trainer.BaseTrainer import BaseTrainer
 from torch.autograd import Variable
 from tqdm import tqdm
 import lightning.pytorch as pl
+from lightning.pytorch.utilities import grad_norm
+
 
 
 class PhysnetTrainer(pl.LightningModule):
@@ -55,18 +57,30 @@ class PhysnetTrainer(pl.LightningModule):
         if batch is None:
             raise ValueError("No data for train")
 
-        running_loss = 0.0
-        train_loss = []
-        print("Nan check",torch.all(batch[0].isnan()==False))
+        if torch.isnan(batch[0]).any():
+            print(batch)
+            print("Error in input")
+            raise RuntimeError
+
         rPPG, x_visual, x_visual3232, x_visual1616 = self.model(
                     batch[0].to(torch.float32).to(self.device))
+
+        if torch.isnan(rPPG).any():
+            print("rppg signal out has nan", torch.isnan(rPPG).any())
+            print(batch)
+            raise RuntimeError
+
         BVP_label = batch[1].to(
                     torch.float32).to(self.device)
+
+        if torch.isnan(BVP_label).any():
+            print("BVP signal is nan")
+            raise RuntimeError
+
         rPPG = (rPPG - torch.mean(rPPG)) / torch.std(rPPG)  # normalize
         BVP_label = (BVP_label - torch.mean(BVP_label)) / \
                             torch.std(BVP_label)  # normalize
         loss = self.loss_model(rPPG, BVP_label)
-        running_loss += loss.item()
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         #     if not self.config.TEST.USE_LAST_EPOCH:
         #         valid_loss = self.valid(data_loader)
@@ -146,9 +160,15 @@ class PhysnetTrainer(pl.LightningModule):
     def on_test_end(self) -> None:
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)
 
+    # def on_before_optimizer_step(self, optimizer):
+    #     # Compute the 2-norm for each layer
+    #     # If using mixed precision, the gradients are already unscaled here
+    #     norms = grad_norm(self.layer, norm_type=2)
+    #     self.log_dict(norms, prog_bar=True)
+
     def configure_optimizers(self):
         optimizer = optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=0)
+            self.parameters(), lr=self.lr, weight_decay=0.0)
 
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
         scheduler = torch.optim.lr_scheduler.OneCycleLR(

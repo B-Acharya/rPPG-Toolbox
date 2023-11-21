@@ -7,6 +7,7 @@ http://publications.idiap.ch/index.php/publications/show/3688
 """
 import glob
 import os
+import random
 import re
 
 import cv2
@@ -54,6 +55,9 @@ class COHFACELoader(BaseLoader):
             self.split_path = config_data.SPLIT_PATH
         elif name == "test":
             self.split_path = config_data.SPLIT_PATH
+        elif name == "unsupervised":
+            self.split_path = config_data.SPLIT_PATH
+
 
         if self.split_path == None:
             self.use_predefined_splits = False
@@ -114,6 +118,12 @@ class COHFACELoader(BaseLoader):
 
         subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
         subj_list = sorted(subj_list)
+        print("Before Shuffle:", subj_list)
+        if self.shuffle:
+            random.Random(4).shuffle(subj_list)
+            print("After Shuffle:", subj_list)
+        else:
+            print("No Shuffle")
         num_subjs = len(subj_list)  # number of unique subjects
 
         # get split of data set (depending on start / end)

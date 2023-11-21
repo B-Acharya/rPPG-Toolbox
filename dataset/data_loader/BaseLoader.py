@@ -101,7 +101,8 @@ class BaseLoader(Dataset):
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
         self.loo = config_data.LOO
-        self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
+        self.shuffle = config_data.SHUFFLE
+        # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
         self.model = model
         if model == "PhysFormer":
             self.transform = transforms.Compose([Normaliztion(), RandomHorizontalFlip()])

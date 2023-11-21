@@ -38,7 +38,7 @@ class PhysFormerTrainer(pl.LightningModule):
         self.min_valid_loss = None
         self.best_epoch = 0
 
-        self.a_start = 1.0
+        self.a_start = 0.1
         self.b_start = 1.0
         self.exp_a = 0.5  # Unused
         self.exp_b = 1.0
@@ -108,13 +108,13 @@ class PhysFormerTrainer(pl.LightningModule):
         kl_loss /= data.shape[0]
         train_mae /= data.shape[0]
 
-        if self.current_epoch > 10:
-            a = 0.05
+        if self.current_epoch > 25:
+            a = 0.1
             b = 5.0
         else:
             a = self.a_start
             # exp ascend
-            b = self.b_start * math.pow(self.exp_b, self.current_epoch / 10.0)
+            b = self.b_start * math.pow(self.exp_b, self.current_epoch / 25.0)
 
         loss = a * loss_rPPG + b * (fre_loss + kl_loss)
 
@@ -174,6 +174,8 @@ class PhysFormerTrainer(pl.LightningModule):
             raise ValueError("No data for test")
 
         # if self.config.TOOLBOX_MODE == "only_test":
+        # if self.config.TOOLBOX_MODE == "only_test":
+        # if self.config.TOOLBOX_MODE == "only_test":
         #     if not os.path.exists(self.config.INFERENCE.MODEL_PATH):
         #         raise ValueError("Inference model path error! Please check INFERENCE.MODEL_PATH in your yaml.")
         #     self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH))
@@ -194,22 +196,7 @@ class PhysFormerTrainer(pl.LightningModule):
         #         self.model.load_state_dict(torch.load(best_model_path))
 
         batch_size = batch[0].shape[0]
-        data, label = batch[0].to(
-                    self.config.DEVICE), batch[1].to(self.config.DEVICE)
-        #pred_ppg_test, _, _, _ = self.model(data[:,0:3,:,:,:])
-        skin_map, rPPG_aux, pred_ppg_test, rPPG_SA1, rPPG_SA2, rPPG_SA3, rPPG_SA4, x_visual6464, x_visual3232 = self.model(data[:, 0:3, :, :, :].to(torch.float32).to(self.device))
-        for idx in range(batch_size):
-            subj_index = batch[2][idx]
-            sort_index = int(batch[3][idx])
-            if subj_index not in self.predictions.keys():
-                self.predictions[subj_index] = dict()
-                self.labels[subj_index] = dict()
-            self.predictions[subj_index][sort_index] = pred_ppg_test[idx]
-            self.labels[subj_index][sort_index] = label[idx]
-
-        batch_size = batch[0].shape[0]
-        data, label = batch[0].to(
-            self.config.DEVICE), batch[1].to(self.config.DEVICE)
+        data, label = batch[0].float().to(self.device), batch[1].float().to(self.device)
         gra_sharp = 2.0
         pred_ppg_test, _, _, _ = self.model(data, gra_sharp)
         for idx in range(batch_size):

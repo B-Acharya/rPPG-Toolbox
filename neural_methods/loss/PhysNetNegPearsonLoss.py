@@ -24,6 +24,8 @@ class Neg_Pearson(nn.Module):
 
     def forward(self, preds, labels):       
         loss = 0
+        assert not torch.any(torch.isnan(preds))
+        assert not torch.any(torch.isnan(labels))
         for i in range(preds.shape[0]):
             sum_x = torch.sum(preds[i])               
             sum_y = torch.sum(labels[i])             
@@ -31,9 +33,10 @@ class Neg_Pearson(nn.Module):
             sum_x2 = torch.sum(torch.pow(preds[i],2))  
             sum_y2 = torch.sum(torch.pow(labels[i],2)) 
             N = preds.shape[1]
-            pearson = (N*sum_xy - sum_x*sum_y)/(torch.sqrt((N*sum_x2 - torch.pow(sum_x,2))*(N*sum_y2 - torch.pow(sum_y,2))))
+            pearson = (N*sum_xy - sum_x*sum_y)/(torch.sqrt((N*sum_x2 - torch.pow(sum_x,2)+1e-5)*(N*sum_y2 - torch.pow(sum_y,2))+1e5))
+            # pearson = torch.clamp(pearson, min=-1, max=1)
             loss += 1 - pearson
-            
+
             
         loss = loss/preds.shape[0]
         return loss

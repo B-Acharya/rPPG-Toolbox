@@ -12,6 +12,7 @@ from neural_methods.trainer.BaseTrainer import BaseTrainer
 from torch.autograd import Variable
 from tqdm import tqdm
 import lightning.pytorch as pl
+import torch.nn.functional as F
 
 
 class rPPGNetTrainer(pl.LightningModule):
@@ -76,12 +77,22 @@ class rPPGNetTrainer(pl.LightningModule):
         loss_ecg4 = self.criterion(rPPG_SA4, BVP_label)
         loss_ecg_aux = self.criterion(rPPG_aux, BVP_label)
 
+        # skin_seg_label = torch.nan_to_num(skin_seg_label, nan=0.0)
+        if torch.isnan(skin_map).any():
+            print("Nan in skinmap")
+            skin_map = torch.nan_to_num(skin_map)
+
+        if torch.isnan(skin_seg_label).any():
+            print("Nan in skinseg")
+            skin_seg_label = torch.nan_to_num(skin_seg_label)
+
         loss_skin = self.skin_loss(skin_map, skin_seg_label)
 
         loss = 0.1 * loss_skin + 0.5 * (loss_ecg1 + loss_ecg2 + loss_ecg3 + loss_ecg4 + loss_ecg_aux) + loss_ecg
 
-        self.log("train_loss", loss, on_step=True, on_epoch=True, batch_size=self.batch_size)
-        self.log("train_skin_loss", loss_skin, on_step=True, on_epoch=True, batch_size=self.batch_size)
+
+        self.log("train_loss", loss, on_step=True, on_epoch=True, batch_size=self.batch_size, prog_bar=True)
+        self.log("train_skin_loss", loss_skin, on_step=True, on_epoch=True, batch_size=self.batch_size, prog_bar=True)
 
         return loss
 
@@ -114,13 +125,14 @@ class rPPGNetTrainer(pl.LightningModule):
         loss_ecg4 = self.criterion(rPPG_SA4, BVP_label)
         loss_ecg_aux = self.criterion(rPPG_aux, BVP_label)
 
+        skin_map = torch.nan_to_num(skin_map)
         loss_skin = self.skin_loss(skin_map, skin_seg_label)
 
         loss = 0.1 * loss_skin + 0.5 * (loss_ecg1 + loss_ecg2 + loss_ecg3 + loss_ecg4 + loss_ecg_aux) + loss_ecg
 
 
-        self.log("val_loss", loss, on_step=True, on_epoch=True, batch_size=self.batch_size)
-        self.log("val_skin_loss", loss_skin, on_step=True, on_epoch=True, batch_size=self.batch_size)
+        self.log("val_loss", loss, on_step=True, on_epoch=True, batch_size=self.batch_size, prog_bar=True)
+        self.log("val_skin_loss", loss_skin, on_step=True, on_epoch=True, batch_size=self.batch_size, prog_bar=True)
 
         return loss
 

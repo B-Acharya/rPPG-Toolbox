@@ -10,6 +10,7 @@ import glob
 import glob
 import json
 import os
+import random
 import re
 
 import cv2
@@ -58,7 +59,8 @@ class PURELoader(BaseLoader):
 
         data_dirs = temp
         if not data_dirs:
-            raise ValueError(self.dataset_name + " data paths empty!")
+            # raise ValueError(self.dataset_name + " data paths empty!")
+            pass
         dirs = list()
         for data_dir in data_dirs:
             subject_trail_val = os.path.split(data_dir)[-1].replace('-', '')
@@ -89,6 +91,12 @@ class PURELoader(BaseLoader):
 
         subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
         subj_list = sorted(subj_list)
+        print("Before Shuffle:", subj_list)
+        if self.shuffle:
+            random.Random(4).shuffle(subj_list)
+            print("After Shuffle:", subj_list)
+        else:
+            print("No Shuffle")
         num_subjs = len(subj_list)  # number of unique subjects
 
         # get split of data set (depending on start / end)

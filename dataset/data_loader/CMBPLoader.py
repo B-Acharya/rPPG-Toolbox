@@ -9,6 +9,7 @@ import pathlib
 import re
 from multiprocessing import Pool, Process, Value, Array, Manager
 import h5py
+import random
 
 import cv2
 import numpy as np
@@ -68,7 +69,7 @@ class CMBPLoader(BaseLoader):
         super().__init__(name, data_path, config_data, model)
 
     def get_raw_data(self, data_path):
-        """Returns data directories under the path(For UBFC dataset)."""
+        """Returns data directories under the path(For CMBP dataset)."""
         data_path = pathlib.Path(data_path)
         data_dirs = [dir for dir in data_path.iterdir() if dir.is_dir()]
         _temp = list()
@@ -94,15 +95,44 @@ class CMBPLoader(BaseLoader):
 
     def split_raw_data(self, data_dirs, begin, end):
         """Returns a subset of data dirs, split with begin and end values."""
-        if begin == 0 and end == 1:  # return the full directory if begin == 0 and end == 1
+        # return the full directory
+        if begin == 0 and end == 1:
             return data_dirs
 
-        file_num = len(data_dirs)
-        choose_range = range(int(begin * file_num), int(end * file_num))
-        data_dirs_new = []
+        # get info about the dataset: subject list and num vids per subject
+        data_info = dict()
+        for data in data_dirs:
+            subject = data['subject']
+            data_dir = data['path']
+            index = data['index']
+            # creates a dictionary of data_dirs indexed by subject number
+            if subject not in data_info:  # if subject not in the data info dictionary
+                data_info[subject] = []  # make an emplty list for that subject
+            # append a tuple of the filename, subject num, trial num, and chunk num
+            data_info[subject].append({"index": index, "path": data_dir, "subject": subject})
 
-        for i in choose_range:
-            data_dirs_new.append(data_dirs[i])
+        subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
+        subj_list = sorted(subj_list)
+        print("Before Shuffle:", subj_list)
+        if self.shuffle:
+            random.Random(4).shuffle(subj_list)
+            print("After Shuffle:", subj_list)
+        else:
+            print("No Shuffle")
+        num_subjs = len(subj_list)  # number of unique subjects
+
+        # get split of data set (depending on start / end)
+        subj_range = list(range(0, num_subjs))
+        if begin != 0 or end != 1:
+            subj_range = list(range(int(begin * num_subjs), int(end * num_subjs)))
+
+        # compile file list
+        data_dirs_new = []
+        for i in subj_range:
+            subj_num = subj_list[i]
+            subj_files = data_info[subj_num]
+            data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
+            # chunk num)
 
         return data_dirs_new
 

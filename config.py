@@ -17,6 +17,8 @@ _C.BASE = ['']
 # Train settings
 # -----------------------------------------------------------------------------\
 _C.TOOLBOX_MODE = ""
+_C.CLUSTER = True
+_C.FOLD = 0
 _C.TRAIN = CN()
 _C.TRAIN.EPOCHS = 50
 _C.TRAIN.BATCH_SIZE = 4
@@ -32,6 +34,7 @@ _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 _C.TRAIN.MODEL_FILE_NAME = ''
 # Train.Data settings
 _C.TRAIN.DATA = CN()
+_C.TRAIN.DATA.SHUFFLE= False
 _C.TRAIN.DATA.INFO = CN()
 _C.TRAIN.DATA.INFO.LIGHT = ['']
 _C.TRAIN.DATA.INFO.MOTION = ['']
@@ -79,6 +82,7 @@ _C.TRAIN.DATA.LOO = False
 _C.VALID = CN()
 # Valid.Data settings
 _C.VALID.DATA = CN()
+_C.VALID.DATA.SHUFFLE= False
 _C.VALID.DATA.INFO = CN()
 _C.VALID.DATA.INFO.LIGHT = ['']
 _C.VALID.DATA.INFO.MOTION = ['']
@@ -128,6 +132,7 @@ _C.TEST.METRICS = []
 _C.TEST.USE_LAST_EPOCH = True
 # Test.Data settings
 _C.TEST.DATA = CN()
+_C.TEST.DATA.SHUFFLE= False
 _C.TEST.DATA.INFO = CN()
 _C.TEST.DATA.INFO.LIGHT = ['']
 _C.TEST.DATA.INFO.MOTION = ['']
@@ -177,6 +182,7 @@ _C.UNSUPERVISED.METHOD = []
 _C.UNSUPERVISED.METRICS = []
 # Unsupervised.Data settings
 _C.UNSUPERVISED.DATA = CN()
+_C.UNSUPERVISED.DATA.SHUFFLE = False
 _C.UNSUPERVISED.DATA.INFO = CN()
 _C.UNSUPERVISED.DATA.INFO.LIGHT = ['']
 _C.UNSUPERVISED.DATA.INFO.MOTION = ['']
