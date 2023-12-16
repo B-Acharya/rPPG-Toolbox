@@ -8,7 +8,7 @@ TRAIN:
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
@@ -37,7 +37,7 @@ VALID:
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
@@ -66,7 +66,7 @@ TEST:
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
@@ -103,10 +103,10 @@ MODEL:
   NAME: Tscan
   TSCAN:
     FRAME_DEPTH: 10
-  MODEL_DIR: "/data/rppg_23_bi_video_nt_lab/processed/Models/"    # Processed dataset save path, need to be updated
+  MODEL_DIR: "/data/rppg_23_bi_video_nt_lab/rppg_processed/Models"    # Processed dataset save path, need to be updated
 
 
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""

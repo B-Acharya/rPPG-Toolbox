@@ -1,0 +1,114 @@
+BASE: ['']
+TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
+FOLD: 0
+TRAIN:
+  BATCH_SIZE: 4
+  EPOCHS: 30
+  LR: 1e-4
+  MODEL_FILE_NAME: COHFACE_COHFACE_COHFACE_rppgnet_loo
+  DATA:
+    FS: 20
+    DATASET: COHFACE
+    DO_PREPROCESS:  False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
+    SPLIT_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/protocols/all/all.txt"                     # Raw dataset path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw','SkinSegmentation' ]
+      DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 64
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY: 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+
+VALID:
+  DATA:
+    FS: 20
+    DATASET: COHFACE
+    DO_PREPROCESS: False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
+    SPLIT_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/protocols/all/dev.txt"                     # Raw dataset path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.8
+    END: 0.9
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw','SkinSegmentation' ]
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 64
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: True
+          DYNAMIC_DETECTION_FREQUENCY : 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+TEST:
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  DATA:
+    FS: 20
+    DATASET: COHFACE
+    DO_PREPROCESS: False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
+    SPLIT_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/protocols/all/test.txt"                     # Raw dataset path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.9
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw','SkinSegmentation' ]
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 64
+      CROP_FACE:
+        DO_CROP_FACE: False
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: True
+          DYNAMIC_DETECTION_FREQUENCY : 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+EARLY_STOPPING:
+  PATIENCE: 10
+  DELTA: 0.01
+  TRAIN: False
+  VALID: False
+LOG:
+  PATH: runs/exp
+MODEL:
+  DROP_RATE: 0.2
+  NAME: rPPGNet
+  rPPGNet:
+    FRAME_DEPTH: 64
+  MODEL_DIR: "/data/rppg_14_cohface_video_nt_lab/processed/Models/"
+INFERENCE:
+  BATCH_SIZE: 4
+  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  MODEL_PATH:   ""

@@ -8,7 +8,7 @@ TRAIN:
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: False # if first time, should be true
+    DO_PREPROCESS: True # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_22_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_22_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
@@ -105,5 +105,5 @@ MODEL:
     FRAME_DEPTH: 64
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""

@@ -8,7 +8,7 @@ TRAIN:
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS:  True # if first time, should be true
+    DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -103,6 +103,7 @@ MODEL:
   NAME: rPPGNet
   rPPGNet:
     FRAME_DEPTH: 64
+  MODEL_DIR: "/data/rppg_14_pure_video_nt_lab/processed/Models/"
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"

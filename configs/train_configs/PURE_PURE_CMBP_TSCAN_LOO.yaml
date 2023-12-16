@@ -1,10 +1,10 @@
 BASE: ['']
-TOOLBOX_MODE: "leave_one_out"      # "train_and_test"  or "only_test"
+TOOLBOX_MODE: "train_and_test"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 40
   LR: 9e-3
-  MODEL_FILE_NAME: PURE_PURE_CMBP_TSCAN_LOO
+  MODEL_FILE_NAME: PURE_PURE_CMBP_TSCAN
   DATA:
     PREPROCESS:
       CHUNK_LENGTH: 1500
@@ -114,5 +114,5 @@ MODEL:
     FRAME_DEPTH: 10
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""

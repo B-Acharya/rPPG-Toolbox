@@ -50,7 +50,7 @@ VALID:
       DATA_TYPE: [ 'Raw' ]
       LABEL_TYPE: Standardized
       DO_CHUNK: True
-      CHUNK_LENGTH: 128
+      CHUNK_LENGTH: 160
       CROP_FACE:
         DO_CROP_FACE: True
         USE_LARGE_FACE_BOX: True

@@ -1,0 +1,122 @@
+BASE: ['']
+TOOLBOX_MODE: "train_and_test"      # "train_and_test"  or "only_test"
+TRAIN:
+  BATCH_SIZE: 4
+  EPOCHS: 40
+  LR: 1e-4
+  MODEL_FILE_NAME: COHFACE_COHFACE_CMBP_physformer
+  DATA:
+    SHUFFLE: True
+    FS: 20
+    DATASET: COHFACE
+    DO_PREPROCESS:  False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
+    SPLIT_PATH: "/homes/bacharya/rPPG-Toolbox/all.txt"                     # Raw dataset path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw' ]
+      DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 160
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY: 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+
+VALID:
+  DATA:
+    SHUFFLE: True
+    FS: 20
+    DATASET: COHFACE
+    DO_PREPROCESS: False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_cohface_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
+    SPLIT_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/protocols/all/all.txt"                     # Raw dataset path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.8
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw' ]
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 160
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY : 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+TEST:
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  DATA:
+    FS: 25
+    DATASET: CMBP
+    DO_PREPROCESS: False # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Raw']
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 160
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY : 1
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 128
+        W: 128
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+EARLY_STOPPING:
+  PATIENCE: 10
+  DELTA: 0.01
+  TRAIN: False
+  VALID: False
+LOG:
+  PATH: runs/exp
+MODEL:
+  DROP_RATE: 0.1
+  NAME: PhysFormer
+  PHYSFORMER:                     # Probably need to update these in some meaningful way
+    PATCH_SIZE: 4
+    DIM: 96
+    FF_DIM: 144
+    NUM_HEADS: 4
+    NUM_LAYERS: 12
+    THETA: 0.7
+  MODEL_DIR: "/homes/bacharya/rPPG-Toolbox/physformerData/Models"    # Processed dataset save path, need to be updated
+INFERENCE:
+  BATCH_SIZE: 4
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: False        # Change this if you'd like an evaluation window smaller than the test video length
+    WINDOW_SIZE: 10        # In seconds
+  MODEL_PATH:   ""

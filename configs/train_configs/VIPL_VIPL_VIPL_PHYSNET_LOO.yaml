@@ -1,14 +1,14 @@
 BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 TRAIN:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 16
   EPOCHS: 40
   LR: 9e-3
   MODEL_FILE_NAME: VIPL_VIPL_VIPL_physnet
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -100,10 +100,10 @@ LOG:
   PATH: runs/exp
 MODEL:
   DROP_RATE: 0.2
-  NAME: Tscan
-  TSCAN:
-    FRAME_DEPTH: 10
-  MODEL_DIR: "/data/rppg_18_vipl_video_nt_lab/processed/Models"
+  NAME: Physnet
+  PHYSNET:
+    FRAME_NUM: 128
+  MODEL_DIR: "/data/rppg_23_bi_video_nt_lab/processed/Models/"    # Processed dataset save path, need to be updated
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
