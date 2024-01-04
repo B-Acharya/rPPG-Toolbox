@@ -157,9 +157,9 @@ def LOO(comet_logger, config, data_loader_dict):
 def train_and_test(config, data_loader_dict):
     """trains the model."""
 
-    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-        project_name="EXP-2-rppg",
-        workspace="b-acharya",
+    comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
+        project_name="DST_RPPG",
+        workspace="m-norden",
         experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
         log_code=True
     )
