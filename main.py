@@ -263,9 +263,9 @@ def test(config, data_loader_dict):
         raise ValueError('Your Model is Not Supported  Yet!')
     # model_trainer.test(data_loader_dict)
 
-    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                               project_name="EXP-2-rppg",
-                               workspace="b-acharya",
+    comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
+                               project_name="DST_rPPG",
+                               workspace="m-norden",
                                experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
                                log_code=True
                                )
@@ -293,9 +293,9 @@ def unsupervised_method_inference(config, data_loader):
         raise ValueError("Please set unsupervised method in yaml!")
     for unsupervised_method in config.UNSUPERVISED.METHOD:
         run_name = unsupervised_method
-        comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+        comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
                                    project_name="unsupervised-methods",
-                                   workspace="b-acharya",
+                                   workspace="m-norden",
                                    experiment_name=f"{run_name}",
                                    log_code=False
                                    )
@@ -435,6 +435,8 @@ if __name__ == "__main__":
             test_loader = data_loader.MMPDLoader.MMPDLoader
         elif config.TEST.DATA.DATASET == "CMBP":
             test_loader = data_loader.CMBPLoader.CMBPLoader
+        elif config.TEST.DATA.DATASET == "DST":
+            test_loader = data_loader.CMBPLoader.DSTLoader
         elif config.TEST.DATA.DATASET == "BP4DPlus":
             test_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
         elif config.TEST.DATA.DATASET == "VIPL":
@@ -481,11 +483,13 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.MMPDLoader.MMPDLoader
         elif config.UNSUPERVISED.DATA.DATASET == "CMBP":
             unsupervised_loader = data_loader.CMBPLoader.CMBPLoader
+        elif config.TEST.DATA.DATASET == "DST":
+            test_loader = data_loader.DSTLoader.DSTLoader
         elif config.UNSUPERVISED.DATA.DATASET == "VIPL":
             unsupervised_loader = data_loader.VIPLLoader.VIPLLoader
         else:
-            raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
-
+            #print(config.TEST.DATA.DATASET)
+            raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, CMBP and SCAMPS.")
         unsupervised_data = unsupervised_loader(
             name="unsupervised",
             data_path=config.UNSUPERVISED.DATA.DATA_PATH,

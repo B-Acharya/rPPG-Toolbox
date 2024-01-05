@@ -158,10 +158,8 @@ class DSTLoader(BaseLoader):
         print("os path exists", os.path.exists(video_path))
         frames = self.read_video(video_path)
         ecgs = self.read_wave(ecg_df)
-
-        print("frame shape",frames.shape)
+        print("frame shape", frames.shape)
         print("bvps shape", ecgs.shape)
-
         target_length = frames.shape[0]
         ecgs = BaseLoader.resample_ppg(ecgs, target_length)
 
