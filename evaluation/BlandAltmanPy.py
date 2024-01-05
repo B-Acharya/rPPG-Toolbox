@@ -142,8 +142,12 @@ class BlandAltman():
         fig = plt.figure(figsize=figure_size)
         ax = fig.add_axes([0,0,1,1])
         xy = np.vstack([avgs,diffs])
-        z = gaussian_kde(xy)(xy)
-        ax.scatter(avgs,diffs, c=z, label='Observations')
+        try:
+            z = gaussian_kde(xy)(xy)
+            ax.scatter(avgs,diffs, c=z, label='Observations')
+        except:
+            ax.scatter(avgs, diffs, label='Observations')
+
         x_vals = np.array(ax.get_xlim())
         ax.axhline(self.mean_error,color='black',label='Mean Error')
         ax.axhline(self.CI95[0],color='black',linestyle='--',label='+95% Confidence Interval')
