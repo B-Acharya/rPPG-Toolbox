@@ -74,7 +74,7 @@ def add_args(parser):
     '''
     return parser
 
-def LOO(comet_logger, config, data_loader_dict):
+def LOO(comet_logger, config, data_loader_dict, outer):
     """trains the model."""
 
 
@@ -94,10 +94,16 @@ def LOO(comet_logger, config, data_loader_dict):
         raise ValueError('your model is not supported  yet!')
 
         #create checkpoint every epoch and track the validation loss
-    checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
-                                              save_top_k=-1,
+    if config.TEST.USE_LAST_EPOCH:
+        checkpoint_callback = ModelCheckpoint(dirpath=config.MODEL.MODEL_DIR,
+                                              filename=f"{config.TRAIN.MODEL_FILE_NAME}_{outer}" + "_{epoch}",
+                                              save_last=True,
+                                              )
+    else:
+        checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
+                                              save_top_k=2,
                                               dirpath=config.MODEL.MODEL_DIR,
-                                              filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
+                                              filename=f"{config.TRAIN.MODEL_FILE_NAME}_{outer}"+"_{epoch}",
                                               monitor="val_loss_epoch",
                                               mode='min')
     lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -108,8 +114,8 @@ def LOO(comet_logger, config, data_loader_dict):
         trainer_light= pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, callbacks=[early_stop_callback, checkpoint_callback], logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
     else:
         if not config.CLUSTER :
-            #trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.1, default_root_dir=config.model.model_dir, logger=comet_logger, max_epochs=config.train.epochs, callbacks=[checkpoint_callback])
-            trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback, lr_monitor], detect_anomaly=True)
+            trainer_light = pl.Trainer(limit_train_batches=0.1, limit_val_batches=0.5, default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
+            #trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback, lr_monitor], detect_anomaly=True)
             #trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback, lr_monitor], gradient_clip_val=0.5, gradient_clip_algorithm='value', detect_anomaly=True)
             print("Running on pycharm")
         # slurm settings
@@ -126,51 +132,64 @@ def LOO(comet_logger, config, data_loader_dict):
                 trainer_light = pl.Trainer(accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
 
 
-        # finding the best lr
-    from lightning.pytorch.tuner.tuning import Tuner
-    tuner = Tuner(trainer_light)
-    lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
-    fig = lr_finder.plot(suggest=True)
-    comet_logger.experiment.log_figure(figure=fig, figure_name="lr-curve")
-    plt.close()
-        # #
-    new_lr = lr_finder.suggestion()
-    model_trainer.lr = new_lr
-    comet_logger.experiment.add_tags(
-            ['lr-finder'])
-    print(model_trainer.lr)
 
-    trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
+    if config.TOOLBOX_MODE == "LOO":
+        # finding the best lr
+        from lightning.pytorch.tuner.tuning import Tuner
+        tuner = Tuner(trainer_light)
+        if config.TEST.USE_LAST_EPOCH:
+            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'])
+        else:
+            # lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
+            #                       val_dataloaders=data_loader_dict['valid'])
+            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
+                                  val_dataloaders=data_loader_dict['test'])
+        fig = lr_finder.plot(suggest=True)
+        comet_logger.experiment.log_figure(figure=fig, figure_name="lr-curve")
+        plt.close()
+        # #
+        new_lr = lr_finder.suggestion()
+        model_trainer.lr = new_lr
+        comet_logger.experiment.add_tags(
+            ['lr-finder'])
+        print(model_trainer.lr)
+        if config.TEST.USE_LAST_EPOCH:
+            trainer_light.fit(model_trainer, data_loader_dict['train'])
+            comet_logger.experiment.add_tag("last_epoch")
+            trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
+        else:
+            #trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
+            trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['test'])
+            comet_logger.experiment.add_tag("best_epoch")
+            trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
+
+    elif config.TOOLBOX_MODE == "LOO_test":
+        trainer_light.test(model_trainer, ckpt_path=config.INFERENCE.MODEL_PATH, dataloaders=data_loader_dict['test'])
+
 
         # #load and test the model on the best epoch / last epoch
         # experiment_key = comet_logger.experiment.get_key()
         # comet_logger = cometlogger(experiment_key=experiment_key)
         # trainer_light = pl.trainer(logger=comet_logger)
 
-    if config.TEST.USE_LAST_EPOCH:
-        comet_logger.experiment.add_tag("last_epoch")
-        trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
-    else:
-        comet_logger.experiment.add_tag("best_epoch")
-        trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
 
-def train_and_test(config, data_loader_dict):
+def train_and_test(comet_logger,config, data_loader_dict):
     """trains the model."""
 
-    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-        project_name="EXP-2-rppg",
-        workspace="b-acharya",
-        experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-        log_code=True
-    )
-    hyper_parameters = {
-        "learning_rate": config.TRAIN.LR,
-        "epochs": config.TRAIN.EPOCHS
-    }
+    # comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+    #     project_name="EXP-2-rppg",
+    #     workspace="b-acharya",
+    #     experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
+    #     log_code=True
+    # # )
+    # hyper_parameters = {
+    #     "learning_rate": config.TRAIN.LR,
+    #     "epochs": config.TRAIN.EPOCHS
+    # }
 
-    comet_logger.log_hyperparams(hyper_parameters)
-    # comet_logger.experiment.add_tags(["final",config.model.name,config.train.data.preprocess.chunk_length, config.train.data.dataset, config.train.data.preprocess.label_type])
-    comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+    # comet_logger.log_hyperparams(hyper_parameters)
+    # # comet_logger.experiment.add_tags(["final",config.model.name,config.train.data.preprocess.chunk_length, config.train.data.dataset, config.train.data.preprocess.label_type])
+    # comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
 
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
@@ -196,12 +215,20 @@ def train_and_test(config, data_loader_dict):
         pass
     else:
         #create checkpoint every epoch and track the validation loss
-        checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
-                                              save_top_k=-1,
+        if config.TEST.USE_LAST_EPOCH:
+            checkpoint_callback = ModelCheckpoint(dirpath=config.MODEL.MODEL_DIR,
+                                                  filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
+                                                  save_last=True,
+                                                  )
+        else:
+            checkpoint_callback = ModelCheckpoint(every_n_epochs=1,
+                                              save_top_k=2,
                                               dirpath=config.MODEL.MODEL_DIR,
+                                              #filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
                                               filename=f"{config.TRAIN.MODEL_FILE_NAME}"+"_{epoch}",
                                               monitor="val_loss_epoch",
                                               mode='min')
+
         if config.EARLY_STOPPING.TRAIN:
             early_stop_callback = EarlyStopping(monitor="train_loss_epoch", min_delta=0.00, patience=3, verbose=false,
                                                 mode="min")
@@ -219,7 +246,12 @@ def train_and_test(config, data_loader_dict):
             #finding the best lr
             from lightning.pytorch.tuner.tuning import Tuner
             tuner = Tuner(trainer_light)
-            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'], val_dataloaders=data_loader_dict['valid'])
+
+            if config.TEST.USE_LAST_EPOCH:
+                lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'] )
+            else:
+                lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
+                                          val_dataloaders=data_loader_dict['valid'])
             fig = lr_finder.plot(suggest=True)
             comet_logger.experiment.log_figure(figure=fig, figure_name="lr-curve")
             plt.close()
@@ -230,7 +262,6 @@ def train_and_test(config, data_loader_dict):
                  ['lr-finder'])
             print(model_trainer.lr)
 
-        trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
 
         # #load and test the model on the best epoch / last epoch
         # experiment_key = comet_logger.experiment.get_key()
@@ -238,11 +269,16 @@ def train_and_test(config, data_loader_dict):
         # trainer_light = pl.trainer(logger=comet_logger)
 
         if config.TEST.USE_LAST_EPOCH:
+            trainer_light.fit(model_trainer, data_loader_dict['train'])
             comet_logger.experiment.add_tag("last_epoch")
             trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
         else:
+            trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['valid'])
             comet_logger.experiment.add_tag("best_epoch")
             trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
+
+
+        # trainer_light.test(model_trainer, ckpt_path=config.INFERENCE.MODEL_PATH, dataloaders=data_loader_dict['test'])
 
 
 def test(config, data_loader_dict):
@@ -327,6 +363,7 @@ if __name__ == "__main__":
     parser = add_args(parser)
     parser = trainer.BaseTrainer.BaseTrainer.add_trainer_args(parser)
     parser = data_loader.BaseLoader.BaseLoader.add_data_loader_args(parser)
+    parser.add_argument("--FOLD", default=None, type=int)
     args = parser.parse_args()
 
     # configurations.
@@ -518,7 +555,7 @@ if __name__ == "__main__":
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
 
-    elif config.TOOLBOX_MODE == "LOO":
+    elif config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
         K_fold = 10
         #train_loader
         if config.TRAIN.DATA.DATASET == "UBFC":
@@ -526,6 +563,7 @@ if __name__ == "__main__":
         elif config.TRAIN.DATA.DATASET == "PURE":
             loader = data_loader.PURELoader.PURELoader
             participants = np.arange(1, 11)
+            kf_inner = KFold(n_splits=9, shuffle=True, random_state=42)
         elif config.TRAIN.DATA.DATASET == "SCAMPS":
             loader = data_loader.SCAMPSLoader.SCAMPSLoader
         elif config.TRAIN.DATA.DATASET == "MMPD":
@@ -534,16 +572,18 @@ if __name__ == "__main__":
             loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
         elif config.TRAIN.DATA.DATASET == "CMBP":
             loader = data_loader.CMBPLoader.CMBPLoader
-            # basepath = pathlib.Path(config.TRAIN.DATA.DATA_PATH)
-            basepath = pathlib.Path("/homes/bacharya/rPPG-Toolbox/CMBP/")
-            import os
-            participants = [ name for name in os.listdir(str(basepath)) if os.path.isdir(os.path.join(basepath, name)) ]
+            basepath = pathlib.Path(config.TRAIN.DATA.DATA_PATH)
+            # basepath = pathlib.Path("/homes/bacharya/rPPG-Toolbox/CMBP/")
+            # import os
+            # participants = [ name for name in os.listdir(str(basepath)) if os.path.isdir(os.path.join(basepath, name)) ]
+            kf_inner = KFold(n_splits=9, shuffle=True, random_state=42)
         elif config.TRAIN.DATA.DATASET == "VIPL":
             loader = data_loader.VIPLLoader.VIPLLoader
             participants = np.arange(1, 108)
         elif config.TRAIN.DATA.DATASET == "COHFACE":
             loader = data_loader.COHFACELoader.COHFACELoader
             participants = np.arange(1, 41)
+            kf_inner = KFold(n_splits=9, shuffle=True, random_state=42)
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
@@ -567,7 +607,7 @@ if __name__ == "__main__":
         else:
             raise NotImplementedError
 
-        kf = KFold(n_splits=K_fold)
+        kf = KFold(n_splits=K_fold, shuffle=True, random_state=42)
         file_list_path = config.TRAIN.DATA.FILE_LIST_PATH
         list_file = pd.read_csv(file_list_path)
 
@@ -592,35 +632,50 @@ if __name__ == "__main__":
 
 
         list_file['id'] = list_file['input_files'].apply(get_participant_index)
+        participants = list(set(list_file['id']))
 
-        def create_path_list(listdf, train, test, i):
+        def create_path_list(listdf, train, test, i, j=0, outer=True):
             train_df = listdf[listdf['id'].isin(train)]
             test_df = listdf[listdf['id'].isin(test)]
-            train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_train.csv"
-            test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_test.csv"
-            train_df.to_csv(str(train_path))
-            test_df.to_csv(str(test_path))
+            if outer:
+                train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_train.csv"
+                test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_test.csv"
+                train_df.to_csv(str(train_path))
+                test_df.to_csv(str(test_path))
+            else:
+                train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_{j}_train.csv"
+                test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_{j}_valid.csv"
+                train_df.to_csv(str(train_path))
+                test_df.to_csv(str(test_path))
+
             return train_path, test_path
 
         for i, (train_index, test_index) in enumerate(kf.split(participants)):
             if i != int(config.FOLD):
                 print(i)
                 continue
-            # if i in [0,1,2,3]:
-            #     continue
-            if config.TRAIN.DATA.DATASET == "CMBP":
-                train_participants = [participants[i] for i in train_index]
-                test_participants = [participants[i] for i in test_index]
-                train_path, test_path = create_path_list(list_file, train_participants, test_participants, i)
-            else:
-                train_path, test_path = create_path_list(list_file, participants[train_index], participants[test_index], i)
-            print(train_path, test_path)
+            train_participants = np.array([participants[i] for i in train_index])
+            test_participants = np.array([participants[i] for i in test_index])
+            train_path, test_path = create_path_list(list_file, train_participants, test_participants, i)
+
+            # for j, (train_index_inner, valid_index_inner) in enumerate(kf_inner.split(train_participants)):
+            #
+            #     if config.TOOLBOX_MODE == "LOO_test":
+            #         if j != config.INNER_FOLD:
+            #             continue
+            #     train_participants_inner = [train_participants[i] for i in train_index_inner]
+            #     valid_participants_inner = [train_participants[i] for i in valid_index_inner]
+            #     train_path, valid_path = create_path_list(list_file, train_participants_inner, valid_participants_inner, i, j, outer=False)
+            #
+            #     print(train_path, test_path)
+
             train_df = pd.read_csv(train_path)
+                # valid_df = pd.read_csv(valid_path)
             test_df = pd.read_csv(test_path)
 
             config.defrost()
             config.TRAIN.DATA.FILE_LIST_PATH = str(train_path)
-            config.VALID.DATA.FILE_LIST_PATH = str(test_path)
+            # config.VALID.DATA.FILE_LIST_PATH = str(valid_path)
             config.TEST.DATA.FILE_LIST_PATH = str(test_path)
             print(config.TEST.DATA.FILE_LIST_PATH)
             print(config.TRAIN.DATA.FILE_LIST_PATH)
@@ -629,83 +684,237 @@ if __name__ == "__main__":
             config.TEST.DATA.DO_PREPROCESS = False
             config.freeze()
 
-            comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                       project_name="Leave-One-Out",
-                                       workspace="b-acharya",
-                                       #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-                                       experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_LOO__FOLD_{i}",
-                                       log_code=True
-                                       )
-            hyper_parameters = {
-                "Learning_rate": config.TRAIN.LR,
-                "epochs": config.TRAIN.EPOCHS
-            }
+            if config.TOOLBOX_MODE == "LOO" :
+
+                comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                           project_name="Exp1-Retraining-Best-epcoh",
+                                           workspace="b-acharya",
+                                           #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
+                                           experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{i}",
+                                           log_code=True
+                                           )
+                hyper_parameters = {
+                    "Learning_rate": config.TRAIN.LR,
+                    "epochs": config.TRAIN.EPOCHS
+                }
+
+            elif config.TOOLBOX_MODE == "LOO_test":
+
+                comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                               project_name="Exp1-Leave-One-Out-Welch",
+                                               workspace="b-acharya",
+                                               #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
+                                               experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_LOO__FOLD_{i}",
+                                               log_code=True
+                                               )
+                hyper_parameters = {
+                        "Learning_rate": config.TRAIN.LR,
+                        "epochs": config.TRAIN.EPOCHS
+                }
+            else:
+                raise NotImplementedError
 
             comet_logger.log_hyperparams(hyper_parameters)
             comet_logger.experiment.add_tags(
-                [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
-                 config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+                    [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+                     config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+            comet_logger.experiment.add_tag(f"Outer_loop:{i}")
             comet_logger.experiment.log_asset(train_path)
             comet_logger.experiment.log_asset(test_path)
+            # comet_logger.experiment.log_asset(valid_path)
             comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
 
-            #ALL run on the same dataset and dont need a asepearte loader
+                #ALL run on the same dataset and dont need a asepearte loader
             train_data = loader(
-                name="train",
-                data_path=config.TRAIN.DATA.DATA_PATH,
-                config_data=config.TRAIN.DATA,
-                model = config.MODEL.NAME
-            )
+                    name="train",
+                    data_path=config.TRAIN.DATA.DATA_PATH,
+                    config_data=config.TRAIN.DATA,
+                    model = config.MODEL.NAME
+                )
 
-            #same as test data loader only difference is that paths
-            #Has left out set is used for both testing and validation
-            valid_data = loader(
-                name="valid",
-                data_path=config.VALID.DATA.DATA_PATH,
-                config_data=config.VALID.DATA,
-                model = config.MODEL.NAME
-            )
+                #same as test data loader only difference is that paths
+                #Has left out set is used for both testing and validation
+                # valid_data = loader(
+                #     name="valid",
+                #     data_path=config.VALID.DATA.DATA_PATH,
+                #     config_data=config.VALID.DATA,
+                #     model = config.MODEL.NAME
+                # )
 
             test_data = loader(
-                name="test",
-                data_path=config.TEST.DATA.DATA_PATH,
-                config_data=config.TEST.DATA,
-                model=config.MODEL.NAME
+                    name="test",
+                    data_path=config.TEST.DATA.DATA_PATH,
+                    config_data=config.TEST.DATA,
+                    model=config.MODEL.NAME
             )
 
             data_loader_dict['train'] = DataLoader(
-                dataset=train_data,
-                num_workers=16,
-                batch_size=config.TRAIN.BATCH_SIZE,
-                shuffle=True,
-                worker_init_fn=seed_worker,
-                generator=train_generator,
+                    dataset=train_data,
+                    num_workers=16,
+                    batch_size=config.TRAIN.BATCH_SIZE,
+                    shuffle=True,
+                    worker_init_fn=seed_worker,
+                    generator=train_generator,
             )
-            data_loader_dict["valid"] = DataLoader(
-                dataset=valid_data,
-                num_workers=16,
-                batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
-                shuffle=False,
-                worker_init_fn=seed_worker,
-                generator=general_generator,
-            )
-
+                # data_loader_dict["valid"] = DataLoader(
+                #     dataset=valid_data,
+                #     num_workers=16,
+                #     batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
+                #     shuffle=False,
+                #     worker_init_fn=seed_worker,
+                #     generator=general_generator,
+                # )
+                #
             data_loader_dict["test"] = DataLoader(
-                dataset=test_data,
-                num_workers=16,
-                batch_size=config.INFERENCE.BATCH_SIZE,
-                shuffle=False,
-                worker_init_fn=seed_worker,
-                generator=general_generator,
+                    dataset=test_data,
+                    num_workers=16,
+                    batch_size=config.INFERENCE.BATCH_SIZE,
+                    shuffle=False,
+                    worker_init_fn=seed_worker,
+                    generator=general_generator,
             )
 
-            LOO(comet_logger, config, data_loader_dict)
+            LOO(comet_logger, config, data_loader_dict, i)
+
+
 
     else:
         raise ValueError("Unsupported toolbox_mode! Currently support train_and_test or only_test or unsupervised_method.")
 
     if config.TOOLBOX_MODE == "train_and_test":
-        train_and_test(config, data_loader_dict)
+        #cross validated evaluation of the methods on MBP-PPG dataset
+        # kf = KFold(n_splits=10, shuffle=True, random_state=42)
+        #
+        # file_list_path = config.TRAIN.DATA.FILE_LIST_PATH
+        # list_file = pd.read_csv(file_list_path)
+        #
+        # def get_participant_index(pathfile):
+        #     "Pandas parsing for geting the index from the full path"
+        #     if "CMBP" in pathfile:
+        #         path = pathfile.split("/")[-1]
+        #         index = path = path.split("_")[0]
+        #         return index
+        #
+        #     else:
+        #         path = pathfile.split("/")[-1]
+        #         if "v" in path:
+        #             index = path.split("v")[0]
+        #             return int(index)
+        #         elif "_" in path:
+        #             index = path.split("_")[0]
+        #             if len(index) == 3:
+        #                 return int(index[0])
+        #             else:
+        #                 return int(index[:2])
+        #
+        #
+        # list_file['id'] = list_file['input_files'].apply(get_participant_index)
+        # participants = list(set(list_file['id']))
+        #
+        # def create_path_list(listdf, train, test, i, j=0, outer=True):
+        #     train_df = listdf[listdf['id'].isin(train)]
+        #     test_df = listdf[listdf['id'].isin(test)]
+        #     if outer:
+        #         train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_train.csv"
+        #         test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_test.csv"
+        #         train_df.to_csv(str(train_path))
+        #         test_df.to_csv(str(test_path))
+        #     else:
+        #         train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_{j}_train.csv"
+        #         test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_{j}_valid.csv"
+        #         train_df.to_csv(str(train_path))
+        #         test_df.to_csv(str(test_path))
+        #
+        #     return train_path, test_path
+        #
+        #
+        # for i, (train_index, valid_index) in enumerate(kf.split(participants)):
+        #     if i != int(config.FOLD):
+        #         print(i)
+        #         continue
+        #
+        #     train_participants = np.array([participants[i] for i in train_index])
+        #     valid_participants = np.array([participants[i] for i in valid_index])
+        #
+        #     train_path, valid_path = create_path_list(list_file, train_participants, valid_participants, i, outer=False)
+        #
+        #     print(train_path, valid_path)
+        #     train_df = pd.read_csv(train_path)
+        #     valid_df = pd.read_csv(valid_path)
+        #
+        #     config.defrost()
+        #     config.TRAIN.DATA.FILE_LIST_PATH = str(train_path)
+        #     config.VALID.DATA.FILE_LIST_PATH = str(valid_path)
+        #     print(config.VALID.DATA.FILE_LIST_PATH)
+        #     print(config.TRAIN.DATA.FILE_LIST_PATH)
+        #     config.TRAIN.DATA.DO_PREPROCESS = False
+        #     config.VALID.DATA.DO_PREPROCESS = False
+        #     config.TEST.DATA.DO_PREPROCESS = False
+        #     config.freeze()
+        #
+        # comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+        #                                project_name="Exp2-public-on-cmbp-best-epoch",
+        #                                workspace="b-acharya",
+        #                                experiment_name=f"{config.TRAIN.DATA.DATASET}_{config.TEST.DATA.DATASET}_{config.MODEL.NAME}",
+        #                                log_code=True
+        #                                )
+
+        comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                   project_name="Exp3-cmbp-on-public-best-epoch",
+                                   workspace="b-acharya",
+                                   experiment_name=f"{config.TRAIN.DATA.DATASET}_{config.TEST.DATA.DATASET}_{config.MODEL.NAME}",
+                                   log_code=True
+                                   )
+        hyper_parameters = {
+            "Learning_rate": config.TRAIN.LR,
+            "epochs": config.TRAIN.EPOCHS
+        }
+
+        comet_logger.log_hyperparams(hyper_parameters)
+        comet_logger.experiment.add_tags(
+            [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+            config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+        # comet_logger.experiment.add_tag(f"Outer_loop:{i}")
+        # comet_logger.experiment.log_asset(train_path)
+        # comet_logger.experiment.log_asset(test())
+        comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+
+        #         # ALL run on the same dataset and dont need a asepearte loader
+        #     train_data = train_loader(
+        #         name="train",
+        #         data_path=config.TRAIN.DATA.DATA_PATH,
+        #         config_data=config.TRAIN.DATA,
+        #         model=config.MODEL.NAME
+        #     )
+        #
+        #         # same as test data loader only difference is that paths
+        #         # Has left out set is used for both testing and validation
+        #     valid_data = valid_loader(
+        #         name="valid",
+        #         data_path=config.VALID.DATA.DATA_PATH,
+        #         config_data=config.VALID.DATA,
+        #         model=config.MODEL.NAME
+        #     )
+
+            # data_loader_dict['train'] = DataLoader(
+            #     dataset=train_data,
+            #     num_workers=16,
+            #     batch_size=config.TRAIN.BATCH_SIZE,
+            #     shuffle=True,
+            #     worker_init_fn=seed_worker,
+            #     generator=train_generator,
+            # )
+            #
+            # data_loader_dict["valid"] = DataLoader(
+            #     dataset=valid_data,
+            #     num_workers=16,
+            #     batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
+            #     shuffle=False,
+            #     worker_init_fn=seed_worker,
+            #     generator=general_generator,
+            # )
+
+        train_and_test(comet_logger, config, data_loader_dict)
     elif config.TOOLBOX_MODE == "only_test":
         test(config, data_loader_dict)
     elif config.TOOLBOX_MODE == "unsupervised_method":

@@ -19,6 +19,7 @@ _C.BASE = ['']
 _C.TOOLBOX_MODE = ""
 _C.CLUSTER = True
 _C.FOLD = 0
+_C.INNER_FOLD = 0
 _C.TRAIN = CN()
 _C.TRAIN.EPOCHS = 50
 _C.TRAIN.BATCH_SIZE = 4
@@ -378,9 +379,14 @@ def update_config(config, args):
     default_UNSUPERVISED_FILE_LIST_PATH = config.UNSUPERVISED.DATA.FILE_LIST_PATH
     default_LOO_FILE_LIST_PATH = config.LOO.DATA.FILE_LIST_PATH
 
+    #get the fold from the command line and update it
+    fold = args.FOLD
+
     # update flag from config file
     _update_config_from_file(config, args.config_file)
     config.defrost()
+
+    config.FOLD = fold
     
     # UPDATE TRAIN PATHS
     if config.TRAIN.DATA.FILE_LIST_PATH == default_TRAIN_FILE_LIST_PATH:

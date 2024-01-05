@@ -35,7 +35,7 @@ class DeepPhysTrainer(pl.LightningModule):
         self.predictions = dict()
         self.labels = dict()
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
             self.model = DeepPhys(img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 
@@ -143,6 +143,7 @@ class DeepPhysTrainer(pl.LightningModule):
         
     def on_test_end(self) -> None:
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)
+
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(

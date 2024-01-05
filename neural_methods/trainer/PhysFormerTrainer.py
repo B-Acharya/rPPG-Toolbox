@@ -53,7 +53,7 @@ class PhysFormerTrainer(pl.LightningModule):
 
         self.hrs = []
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
             self.model = ViT_ST_ST_Compact3_TDC_gra_sharp(
                 image_size=(
                     self.chunk_len, config.TRAIN.DATA.PREPROCESS.RESIZE.H, config.TRAIN.DATA.PREPROCESS.RESIZE.W),

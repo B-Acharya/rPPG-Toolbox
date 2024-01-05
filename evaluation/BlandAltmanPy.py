@@ -52,7 +52,7 @@ class BlandAltman():
 
         # Define save path
         if config != None:
-            if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test':
+            if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
                 self.save_path  = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'bland_altman_plots')
             elif config.TOOLBOX_MODE == 'unsupervised_method':
                 self.save_path  = os.path.join(config.LOG.PATH, config.UNSUPERVISED.DATA.EXP_DATA_NAME, 'bland_altman_plots')
@@ -109,7 +109,7 @@ class BlandAltman():
         ax=fig.add_axes([0,0,1,1])
         xy = np.vstack([self.gold_std,self.new_measure])
         z = gaussian_kde(xy)(xy)
-        ax.scatter(self.gold_std,self.new_measure, c=z, s=50)
+        ax.scatter(self.gold_std, self.new_measure, c=z, s=50)
         x_vals = np.array(ax.get_xlim())
         ax.plot(x_vals,x_vals,'--',color='black', label='Line of Slope = 1')
         ax.set_xlabel(x_label)

@@ -128,6 +128,13 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=False, sa
                     gt_hr_fft_all.append(gt_fft_hr)
                     predict_hr_fft_all.append(pre_fft_hr)
                     SNR_all.append(SNR)
+                elif config.INFERENCE.EVALUATION_METHOD == "Welch":
+                    gt_fft_hr, pre_fft_hr, SNR = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
+                                                                            fs=config.UNSUPERVISED.DATA.FS,
+                                                                            hr_method='Welch')
+                    gt_hr_fft_all.append(gt_fft_hr)
+                    predict_hr_fft_all.append(pre_fft_hr)
+                    SNR_all.append(SNR)
                 else:
                     raise ValueError("Inference evaluation method name wrong!")
             # if config.INFERENCE.EVALUATION_METHOD == "peak detection":
@@ -140,18 +147,27 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=False, sa
             #                                                        fs=config.UNSUPERVISED.DATA.FS, hr_method='FFT')
             #     predict_hr_fft_all.append(pre_fft_hr)
             #     gt_hr_fft_all.append(gt_fft_hr)
+            if config.INFERENCE.EVALUATION_METHOD == "FFT":
+                predictions_dict[filename] = {"GT_HR":gt_fft_hr, "Pred_HR":pre_fft_hr}
+                MAE = np.mean(np.abs(gt_fft_hr - pre_fft_hr))
+            elif config.INFERENCE.EVALUATION_METHOD == "Welch":
+                predictions_dict[filename] = {"GT_HR": gt_fft_hr, "Pred_HR": pre_fft_hr}
+                MAE = np.mean(np.abs(gt_fft_hr - pre_fft_hr))
+            else:
+                predictions_dict[filename] = {"GT_HR":gt_hr, "Pred_HR":pre_hr}
+                MAE = np.mean(np.abs(gt_hr - pre_hr))
 
-            predictions_dict[filename] = {"GT_HR":gt_fft_hr, "Pred_HR":pre_fft_hr}
-
-            MAE = np.mean(np.abs(gt_fft_hr - pre_fft_hr))
             print("FFT MAE (FFT Label): {0} ".format(MAE))
             print(filename)
             if log:
                 logger.log_metrics({filename: MAE})
     if method_name == "dummy":
+        print("running mean predicition")
         mean_hr = np.mean(gt_hr_fft_all)
         for key in predictions_dict.keys():
             predictions_dict[key]["Pred_HR"] = mean_hr
+        for i in range(len(predict_hr_fft_all)):
+            predict_hr_fft_all[i] = mean_hr
 
     if save_outputs:
         save_test_outputs(predictions, labels, config, method_name)
@@ -189,7 +205,20 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=False, sa
                 print("FFT SNR (FFT Label): {0} +/- {1}".format(SNR_FFT, standard_error))
             else:
                 raise ValueError("Wrong Test Metric Type")
-    elif config.INFERENCE.EVALUATION_METHOD == "FFT":
+        compare = BlandAltman(gt_hr_peak_all, predict_hr_peak_all, config, logger=logger, averaged=True)
+        compare.scatter_plot(
+            x_label='GT PPG HR [bpm]',
+            y_label='rPPG HR [bpm]',
+            show_legend=True, figure_size=(5, 5),
+            the_title=f'{filename_id}_peak_BlandAltman_ScatterPlot',
+            file_name=f'{filename_id}_peak_BlandAltman_ScatterPlot.pdf')
+        compare.difference_plot(
+            x_label='Difference between rPPG HR and GT PPG HR [bpm]',
+            y_label='Average of rPPG HR and GT PPG HR [bpm]',
+            show_legend=True, figure_size=(5, 5),
+            the_title=f'{filename_id}_peak_BlandAltman_DifferencePlot',
+            file_name=f'{filename_id}_peak_BlandAltman_DifferencePlot.pdf')
+    elif config.INFERENCE.EVALUATION_METHOD == "FFT" or config.INFERENCE.EVALUATION_METHOD == "Welch":
         predict_hr_fft_all = np.array(predict_hr_fft_all)
         gt_hr_fft_all = np.array(gt_hr_fft_all)
         SNR_all = np.array(SNR_all)
@@ -254,8 +283,12 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=False, sa
             if index[-1] == "3":
                 result['HighHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
 
+        df = pd.DataFrame.from_dict(dict(sorted(predictions_dict.items())))
+        logger.experiment.log_dataframe_profile(df, "whole-data")
+
         for key in result.keys():
             dataframe = pd.DataFrame.from_dict(result[key]).T
+            logger.experiment.log_dataframe_profile(dataframe, key)
             print(dataframe)
             mae, standard_error = calcualte_mae_per_setting(dataframe)
             print(f"--{key}--")

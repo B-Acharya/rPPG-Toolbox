@@ -102,6 +102,7 @@ class BaseLoader(Dataset):
         self.do_preprocess = config_data.DO_PREPROCESS
         self.loo = config_data.LOO
         self.shuffle = config_data.SHUFFLE
+        self.fs = config_data.FS
         # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
         self.model = model
         if model == "PhysFormer":
@@ -164,7 +165,7 @@ class BaseLoader(Dataset):
         chunk_id = item_path_filename[split_idx + 6:].split('.')[0]
         if self.model == "PhysFormer":
 
-            clip_average_HR = get_hr(label)
+            clip_average_HR = get_hr(label, sr=self.fs)
 
             p = random.random()
 

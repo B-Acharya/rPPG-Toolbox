@@ -4,9 +4,42 @@ import torch
 from evaluation.post_process import *
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import pickle
+import os
 from evaluation.BlandAltmanPy import BlandAltman
 
+def save_test_outputs( predictions, labels, config, method_name):
+    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test':
+        output_dir = config.TEST.OUTPUT_SAVE_DIR
+    else:
+        output_dir = config.UNSUPERVISED.DATA.CACHED_PATH
 
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    # Filename ID to be used in any output files that get saved
+    if config.TOOLBOX_MODE == 'train_and_test':
+        filename_id = config.MODEL
+    elif config.TOOLBOX_MODE == 'only_test':
+        model_file_root = config.INFERENCE.MODEL_PATH.split("/")[-1].split(".pth")[0]
+        filename_id = model_file_root + "_" + config.TEST.DATA.DATASET
+    elif config.TOOLBOX_MODE == 'unsupervised_method':
+        filename_id = method_name
+
+    else:
+        raise ValueError('Metrics.py evaluation only supports train_and_test and only_test!')
+    output_path = os.path.join(output_dir, filename_id + '_outputs.pickle')
+
+    data = dict()
+    data['predictions'] = predictions
+    data['labels'] = labels
+    data['label_type'] = config.TEST.DATA.PREPROCESS.LABEL_TYPE
+    data['fs'] = config.TEST.DATA.FS
+
+    with open(output_path, 'wb') as handle:  # save out frame dict pickle file
+        pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    print('Saving outputs to:', output_path)
 
 def calcualte_mae_per_setting(dataframe):
     mae = np.mean(np.abs(dataframe["HR_GT"] - dataframe["HR_Pred"]))
@@ -94,7 +127,7 @@ def _reform_data_from_dict(data):
     return np.reshape(sort_data.cpu(), (-1))
 
 
-def calculate_metrics(predictions, labels, config, logger):
+def calculate_metrics(predictions, labels, config, logger, save_outputs=True):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
     predict_hr_fft_all = list()
     gt_hr_fft_all = list()
@@ -147,6 +180,20 @@ def calculate_metrics(predictions, labels, config, logger):
                 predict_hr_fft_all.append(pred_hr_fft)
                 SNR_all.append(SNR)
                 predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
+            elif config.INFERENCE.EVALUATION_METHOD == "Welch":
+                gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
+                    prediction, label, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
+                gt_hr_fft_all.append(gt_hr_fft)
+                predict_hr_fft_all.append(pred_hr_fft)
+                SNR_all.append(SNR)
+                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
+            elif config.INFERENCE.EVALUATION_METHOD == "Welch_fft":
+                gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
+                    prediction, label, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='Welch')
+                gt_hr_fft_all.append(gt_hr_fft)
+                predict_hr_fft_all.append(pred_hr_fft)
+                SNR_all.append(SNR)
+                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
             else:
                 raise ValueError("Inference evaluation method name wrong!")
 
@@ -159,7 +206,10 @@ def calculate_metrics(predictions, labels, config, logger):
     plot_bland(logger, predictions_dict)
     filename_id = config.TRAIN.MODEL_FILE_NAME
 
-    if config.INFERENCE.EVALUATION_METHOD == "FFT":
+    if save_outputs:
+        save_test_outputs(predictions, labels, config, method_name)
+
+    if config.INFERENCE.EVALUATION_METHOD == "FFT" or config.INFERENCE.EVALUATION_METHOD == "Welch" or config.INFERENCE.EVALUATION_METHOD == "Welch_fft":
         gt_hr_fft_all = np.array(gt_hr_fft_all)
         predict_hr_fft_all = np.array(predict_hr_fft_all)
         SNR_all = np.array(SNR_all)
@@ -185,29 +235,35 @@ def calculate_metrics(predictions, labels, config, logger):
                 correlation_coefficient = Pearson_FFT[0][1]
                 standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
                 print("FFT Pearson (FFT Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
-                logger.log_metrics({"FFT Pearson ":correlation_coefficient, "FFT Pearson std":standard_error})
+                logger.log_metrics({"FFT Pearson ": correlation_coefficient, "FFT Pearson std": standard_error})
 
             elif metric == "SNR":
                 SNR_FFT = np.mean(SNR_all)
                 standard_error = np.std(SNR_all) / np.sqrt(num_test_samples)
                 print("FFT SNR (FFT Label): {0} +/- {1}".format(SNR_FFT, standard_error))
-                logger.log_metrics({"FFT SNR_FFT":Pearson_FFT, "FFT SNR std":standard_error})
+                logger.log_metrics({"FFT SNR_FFT": SNR_FFT, "FFT SNR std": standard_error})
             else:
                 raise ValueError("Wrong Test Metric Type")
 
         compare = BlandAltman(gt_hr_fft_all, predict_hr_fft_all, config, logger=logger, averaged=True)
-        compare.scatter_plot(
-            x_label='GT PPG HR [bpm]',
-            y_label='rPPG HR [bpm]',
-            show_legend=True, figure_size=(5, 5),
-            the_title=f'{filename_id}_FFT_BlandAltman_ScatterPlot',
-            file_name=f'{filename_id}_FFT_BlandAltman_ScatterPlot.pdf')
-        compare.difference_plot(
-            x_label='Difference between rPPG HR and GT PPG HR [bpm]',
-            y_label='Average of rPPG HR and GT PPG HR [bpm]',
-            show_legend=True, figure_size=(5, 5),
-            the_title=f'{filename_id}_FFT_BlandAltman_DifferencePlot',
-            file_name=f'{filename_id}_FFT_BlandAltman_DifferencePlot.pdf')
+        try:
+            compare.scatter_plot(
+                x_label='GT PPG HR [bpm]',
+                y_label='rPPG HR [bpm]',
+                show_legend=True, figure_size=(5, 5),
+                the_title=f'{filename_id}_FFT_BlandAltman_ScatterPlot',
+                file_name=f'{filename_id}_FFT_BlandAltman_ScatterPlot.pdf')
+        except:
+            print("Plot not available")
+        try:
+            compare.difference_plot(
+                x_label='Difference between rPPG HR and GT PPG HR [bpm]',
+                y_label='Average of rPPG HR and GT PPG HR [bpm]',
+                show_legend=True, figure_size=(5, 5),
+                the_title=f'{filename_id}_FFT_BlandAltman_DifferencePlot',
+                file_name=f'{filename_id}_FFT_BlandAltman_DifferencePlot.pdf')
+        except:
+            print("Difference plot not available")
 
     elif config.INFERENCE.EVALUATION_METHOD == "peak detection":
         gt_hr_peak_all = np.array(gt_hr_peak_all)
