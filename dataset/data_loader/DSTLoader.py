@@ -102,10 +102,12 @@ class DSTLoader(BaseLoader):
                 if "speech" in task:
                     start_time = speech_task_start_time_sensor
                     end_time = speech_task_end_time_sensor
+                    hr = bpm_rmssd_dict['speech_bpm']
                 else:
                     start_time = math_task_start_time_sensor
                     end_time = math_task_end_time_sensor
-                dirs.append({"task":task, "subject":subject, "video_path": str(data_dir), "sensor_txt": sensor_txt, "start_time": start_time, "end_time": end_time})
+                    hr = bpm_rmssd_dict['math_bpm']
+                dirs.append({"task":task, "subject":subject, "video_path": str(data_dir), "sensor_txt": sensor_txt, "start_time": start_time, "end_time": end_time, "hr": hr})
 
         return dirs
 
@@ -122,14 +124,20 @@ class DSTLoader(BaseLoader):
             data_dir = data['video_path']
             task = data['task']
             ecg_df = data["ecg_df"]
+            sensor_txt = data['sensor_txt']
+            start_time = data['start_time']
+            end_time = data['end_time']
+            hr = data['hr']
+
             # creates a dictionary of data_dirs indexed by subject number
             if subject not in data_info:  # if subject not in the data info dictionary
                 data_info[subject] = []  # make an empty list for that subject
             # append a tuple of the filename, subject num, trial num, and chunk num
-            data_info[subject].append({"task":task, "subject":subject, "video_path": data_dir, "sensor_txt": sensor_txt, "start_time": start_time, "end_time": end_time})
+            data_info[subject].append({"task":task, "subject":subject, "video_path": data_dir, "sensor_txt": sensor_txt, "start_time": start_time, "end_time": end_time, 'hr': hr })
 
         subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
         subj_list = sorted(subj_list)
+
         print("Before Shuffle:", subj_list)
         if self.shuffle:
             random.Random(4).shuffle(subj_list)
@@ -148,7 +156,7 @@ class DSTLoader(BaseLoader):
         for i in subj_range:
             subj_num = subj_list[i]
             subj_files = data_info[subj_num]
-            data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
+            data_dirs_new += subj_files  #add file information to file_list (tuple of fname, subj ID, trial num,
             # chunk num)
 
         return data_dirs_new
@@ -170,6 +178,7 @@ class DSTLoader(BaseLoader):
         sensor_txt = data_dirs[i]['sensor_txt']
         start_time = data_dirs[i]['start_time']
         end_time = data_dirs[i]['end_time']
+        hr = data_dirs[i]['hr']
         sensor_df = self.sensor_txt_to_df(sensor_txt)
         ecg_df = sensor_df[(sensor_df["time_seconds"] >= start_time) & (sensor_df["time_seconds"] <= end_time)]
         print("os path exists converted", os.path.exists(video_path_converted))
@@ -182,7 +191,8 @@ class DSTLoader(BaseLoader):
         ecgs = BaseLoader.resample_ppg(ecgs, target_length)
 
         frames_clips, bvps_clips = self.preprocess(frames, ecgs, config_preprocess)
-        input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
+        #overide ecg to HR
+        input_name_list, label_name_list = self.save_multi_process(frames_clips, hr , saved_filename)
         file_list_dict[i] = input_name_list
 
     @staticmethod
