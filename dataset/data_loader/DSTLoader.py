@@ -155,9 +155,8 @@ class DSTLoader(BaseLoader):
         saved_filename = data_dirs[i]['task']
         video_path = data_dirs[i]['video_path']
         ecg_df = data_dirs[i]['ecg_df']
-        print("os path exists", os.path.exists(os.path.video_path))
-        frames = self.read_video(
-            os.path.(video_path)
+        print("os path exists", os.path.exists(video_path))
+        frames = self.read_video(video_path)
         ecgs = self.read_wave(ecg_df)
 
         print("frame shape",frames.shape)
