@@ -3,7 +3,7 @@
 import argparse
 import random
 import time
-
+import subprocess
 import numpy as np
 import pandas as pd
 import torch
@@ -436,7 +436,7 @@ if __name__ == "__main__":
         elif config.TEST.DATA.DATASET == "CMBP":
             test_loader = data_loader.CMBPLoader.CMBPLoader
         elif config.TEST.DATA.DATASET == "DST":
-            test_loader = data_loader.CMBPLoader.DSTLoader
+            test_loader = data_loader.DSTLoader.DSTLoader
         elif config.TEST.DATA.DATASET == "BP4DPlus":
             test_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
         elif config.TEST.DATA.DATASET == "VIPL":
@@ -483,8 +483,8 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.MMPDLoader.MMPDLoader
         elif config.UNSUPERVISED.DATA.DATASET == "CMBP":
             unsupervised_loader = data_loader.CMBPLoader.CMBPLoader
-        elif config.TEST.DATA.DATASET == "DST":
-            test_loader = data_loader.DSTLoader.DSTLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "DST":
+            unsupervised_loader = data_loader.DSTLoader.DSTLoader
         elif config.UNSUPERVISED.DATA.DATASET == "VIPL":
             unsupervised_loader = data_loader.VIPLLoader.VIPLLoader
         else:
