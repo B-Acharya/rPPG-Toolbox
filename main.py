@@ -14,6 +14,7 @@ from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+import comet_ml
 from lightning.pytorch.loggers import CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch.strategies import DDPStrategy
@@ -159,7 +160,7 @@ def train_and_test(config, data_loader_dict):
 
     comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
         project_name="DST_RPPG",
-        workspace="m-norden",
+        workspace="mno-93",
         experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
         log_code=True
     )
@@ -265,7 +266,7 @@ def test(config, data_loader_dict):
 
     comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
                                project_name="DST_rPPG",
-                               workspace="m-norden",
+                               workspace="mno-93",
                                experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
                                log_code=True
                                )
@@ -295,9 +296,9 @@ def unsupervised_method_inference(config, data_loader):
         run_name = unsupervised_method
         comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
                                    project_name="unsupervised-methods",
-                                   workspace="m-norden",
+                                   workspace="mno-93",
                                    experiment_name=f"{run_name}",
-                                   log_code=False
+                                   log_code=True
                                    )
         # mlflow_run = mlflow.start_run(experiment_id=experiment_id, run_name=run_name)
         # with mlflow_run:

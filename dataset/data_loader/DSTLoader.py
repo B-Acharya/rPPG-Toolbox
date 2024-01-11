@@ -84,7 +84,7 @@ class DSTLoader(BaseLoader):
             sensor_files = json.load(f)
         print("Files loaded from json.")
         filtered_tuple = {key: value for key, value in sensor_files.items() if 'dst' in key}
-        print(len(filtered_tuple), "DST Files in Json-File")
+        print(len(filtered_tuple), "DSTs with each speech and math in Json-File")
         dirs = list()
         for token, (timer1_marker, csv_marker_0, csv_marker_1, back_from_study,
                     sensor_txt, sampling_rate, dst_files,
