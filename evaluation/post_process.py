@@ -7,6 +7,8 @@ import scipy
 import scipy.io
 from scipy.signal import butter
 from scipy.sparse import spdiags
+import pandas as pd
+
 
 
 def _next_power_of_2(x):
@@ -48,6 +50,7 @@ def _calculate_peak_hr(ppg_signal, fs):
     ppg_peaks, _ = scipy.signal.find_peaks(ppg_signal)
     hr_peak = 60 / (np.mean(np.diff(ppg_peaks)) / fs)
     return hr_peak
+
 
 def _calculate_SNR(pred_ppg_signal, hr_label, fs=30, low_pass=0.75, high_pass=2.5):
     """Calculate SNR as the ratio of the area under the curve of the frequency spectrum around the first and second harmonics 

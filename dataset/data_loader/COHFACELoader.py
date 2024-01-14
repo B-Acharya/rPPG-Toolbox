@@ -11,7 +11,7 @@ import random
 import re
 
 import cv2
-import h5py
+# import h5py
 import numpy as np
 
 import config
