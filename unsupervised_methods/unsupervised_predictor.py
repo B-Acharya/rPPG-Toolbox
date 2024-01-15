@@ -4,6 +4,7 @@ import logging
 import os
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -213,6 +214,10 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
     dataframe = pd.DataFrame.from_dict(predictions_dict).T
     dataframe.to_csv(f"{config.UNSUPERVISED.DATA.CACHED_PATH}/{method_name}_{config.INFERENCE.EVALUATION_METHOD}.csv")
     logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+    dataframe['GT_HR'].plot.hist()
+    logger.experiment.log_figure(figure=plt, figure_name="GT-Histogram")
+    plt.close()
+
 
     metrics_calculations(gt_hr_all, predict_hr_all, SNR_all, config, logger)
 
