@@ -125,6 +125,7 @@ class BlandAltman():
         else:
             plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=300)
             print(f"Saved {file_name} to {self.save_path}.")
+        plt.close('all')
 
     def difference_plot(self,x_label='Difference between rPPG HR and ECG HR [bpm]',
                         y_label='Average of rPPG HR and ECG HR [bpm]',averaged=False,
@@ -166,3 +167,4 @@ class BlandAltman():
         else:
             plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=100)
             print(f"Saved {file_name} to {self.save_path}.")
+        plt.close('all')

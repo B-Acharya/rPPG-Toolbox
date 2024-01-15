@@ -316,29 +316,19 @@ def test(config, data_loader_dict):
 
 def unsupervised_method_inference(config, data_loader):
 
-    exp_name = config.TOOLBOX_MODE + config.UNSUPERVISED.DATA.DATASET
-
-    # mlflow experiment id
-    # try:
-    #     experiment_id = mlflow.create_experiment(exp_name)
-    # except:
-    #     experiment_id = mlflow.get_experiment_by_name(exp_name).experiment_id
-
-
     if not config.UNSUPERVISED.METHOD:
         raise ValueError("Please set unsupervised method in yaml!")
     for unsupervised_method in config.UNSUPERVISED.METHOD:
         run_name = unsupervised_method
         comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                   project_name="unsupervised-methods",
+                                   #project_name="unsupervised-methods",
+                                   project_name="test-hr",
                                    workspace="b-acharya",
                                    experiment_name=f"{run_name}",
                                    log_code=False
                                    )
-        # mlflow_run = mlflow.start_run(experiment_id=experiment_id, run_name=run_name)
-        # with mlflow_run:
         comet_logger.experiment.add_tag(f"{config.UNSUPERVISED.DATA.DATASET}")
-        comet_logger.experiment.add_tag(f"bandpass:3")
+        comet_logger.experiment.add_tag(f"{config.INFERENCE.EVALUATION_METHOD}")
         if unsupervised_method == "POS":
             unsupervised_predict(config, data_loader, "POS", comet_logger)
         elif unsupervised_method == "CHROM":
