@@ -14,7 +14,7 @@ import numpy as np
 import subprocess
 import matplotlib.pyplot as plt
 from pathlib import Path
-import h5py
+#import h5py
 
 
 

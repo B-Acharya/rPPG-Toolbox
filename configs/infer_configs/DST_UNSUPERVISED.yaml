@@ -9,7 +9,7 @@ UNSUPERVISED:
     DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDHWC
     DATA_PATH: "/data/dst_tsst_22_bi_multi_nt_lab/processed/sensor_files.json"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/data/r-hack/r-hack-2-dst/rPPG"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/data/dst_tsst_22_bi_multi_nt_lab/processed/rPPG"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
