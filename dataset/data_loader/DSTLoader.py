@@ -37,7 +37,12 @@ class DSTLoader(BaseLoader):
                                                 speech_task_start_time_sensor,
                                                 speech_task_end_time_sensor,
                                                 math_task_start_time_sensor,
-                                                math_task_end_time_sensor)
+
+                                                math_task_end_time_sensor,
+                                                bpm_rmssd_dict = {"speech_bpm": - float,
+                                                                  "speech_rmssd": - float,
+                                                                  "math_bpm": - float,
+                                                                  "math_rmssd - float})
        ---
        Data structure
        -----------------
@@ -89,7 +94,7 @@ class DSTLoader(BaseLoader):
         for token, (timer1_marker, csv_marker_0, csv_marker_1, back_from_study,
                     sensor_txt, sampling_rate, dst_files,
                     speech_task_start_time_sensor, speech_task_end_time_sensor, math_task_start_time_sensor,
-                    math_task_end_time_sensor) in tqdm(filtered_tuple.items()):
+                    math_task_end_time_sensor, bpm_rmssd_dict) in tqdm(filtered_tuple.items()):
             subject = str(token[-8:])
             for dst_key in ["dst_speech_video", "dst_math_video"]:
                 data_dir = dst_files[dst_key][0]
