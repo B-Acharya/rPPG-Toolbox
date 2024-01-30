@@ -94,6 +94,7 @@ class BaseLoader(Dataset):
         self.inputs = list()
         self.labels = list()
         self.dataset_name = dataset_name
+        self.infer_dataset = config_data.DATASET
         self.raw_data_path = raw_data_path
         self.cached_path = config_data.CACHED_PATH
         self.file_list_path = config_data.FILE_LIST_PATH
@@ -559,16 +560,29 @@ class BaseLoader(Dataset):
         count = 0
         input_path_name_list = []
         label_path_name_list = []
-        for i in range(len(bvps_clips)):
-            assert (len(self.inputs) == len(self.labels)), "Not processing this video"
-            input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
-            label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
-            input_path_name_list.append(input_path_name)
-            label_path_name_list.append(label_path_name)
-            np.save(input_path_name, frames_clips[i])
-            np.save(label_path_name, bvps_clips[i])
-            count += 1
-        return input_path_name_list, label_path_name_list
+        if self.infer_dataset == "DST":
+            for i in range(len(frames_clips)):
+                assert (len(self.inputs) == len(self.labels)), "Not processing this video"
+                input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
+                input_path_name_list.append(input_path_name)
+                label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
+                label_path_name_list.append(label_path_name)
+                np.save(label_path_name, bvps_clips)
+                np.save(input_path_name, frames_clips[i])
+                count += 1
+            return input_path_name_list, label_path_name_list
+
+        else:
+            for i in range(len(bvps_clips)):
+                assert (len(self.inputs) == len(self.labels)), "Not processing this video"
+                input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
+                label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
+                input_path_name_list.append(input_path_name)
+                label_path_name_list.append(label_path_name)
+                np.save(input_path_name, frames_clips[i])
+                np.save(label_path_name, bvps_clips[i])
+                count += 1
+            return input_path_name_list, label_path_name_list
 
     def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
         """Allocate dataset preprocessing across multiple processes.

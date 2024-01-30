@@ -122,11 +122,21 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
     predictions = dict()
     labels = dict()
     SNR_all = []
+
+    if config.UNSUPERVISED.DATA.DATASET == "DST":
+        DST = True
+    else:
+        DST = False
+
     sbar = tqdm(data_loader["unsupervised"], ncols=80)
     for _, test_batch in enumerate(sbar):
         batch_size = test_batch[0].shape[0]
         for idx in range(batch_size):
-            data_input, labels_input = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
+            if DST:
+                data_input, gt_hr = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
+            else:
+                data_input, labels_input = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
+
             filename = test_batch[2][idx]
             index = test_batch[2]
             MAE_per_scenarios = dict()
@@ -143,13 +153,19 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
             elif method_name == "PBV":
                 BVP = PBV(data_input)
             elif method_name == "dummy":
-                BVP = labels_input
+                if DST:
+                    pass
+                else:
+                    BVP = labels_input
             else:
                 raise ValueError("unsupervised method name wrong!")
 
             if save_outputs:
                 predictions[filename] = BVP
-                labels[filename] = labels_input
+                if DST:
+                    labels[filename] = gt_hr
+                else:
+                    labels[filename] = labels_input
 
             video_frame_size = test_batch[0].shape[1]
             if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
@@ -161,14 +177,20 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
 
             for i in range(0, len(BVP), window_frame_size):
                 BVP_window = BVP[i:i+window_frame_size]
-                label_window = labels_input[i:i+window_frame_size]
+                if DST:
+                    pass
+                else:
+                    label_window = labels_input[i:i+window_frame_size]
 
                 if len(BVP_window) < 9:
                     print(f"Window frame size of {len(BVP_window)} is smaller than minimum pad length of 9. Window ignored!")
                     continue
 
                 if config.INFERENCE.EVALUATION_METHOD == "peak detection":
-                    gt_hr, pre_hr, SNR = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
+                    if DST:
+                        pre_hr = calculate_HR(BVP_window, fs=config.UNSUPERVISED.DATA.FS, diff_flag=False, hr_method='Peak')
+                    else:
+                        gt_hr, pre_hr, SNR = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
                                                                     fs=config.UNSUPERVISED.DATA.FS, hr_method='Peak')
                 elif config.INFERENCE.EVALUATION_METHOD == "FFT":
                     gt_hr, pre_hr, SNR = calculate_metric_per_video(BVP_window, label_window, diff_flag=False,
