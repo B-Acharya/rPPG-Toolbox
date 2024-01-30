@@ -559,6 +559,7 @@ class BaseLoader(Dataset):
         count = 0
         input_path_name_list = []
         label_path_name_list = []
+        print("self.infer_dataset:", self.infer_dataset)
         if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
                 assert (len(self.inputs) == len(self.labels)), "Not processing this video"

@@ -123,6 +123,7 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
     SNR_all = []
 
     if config.UNSUPERVISED.DATA.DATASET == "DST":
+        print("Using DST")
         DST = True
     else:
         DST = False
@@ -178,6 +179,7 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
             for i in range(0, len(BVP), window_frame_size):
                 BVP_window = BVP[i:i+window_frame_size]
                 if DST:
+                    print("DST")
                     pass
                 else:
                     label_window = labels_input[i:i+window_frame_size]

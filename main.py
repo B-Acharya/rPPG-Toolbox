@@ -78,7 +78,7 @@ def add_args(parser):
 def LOO(comet_logger, config, data_loader_dict):
     """trains the model."""
 
-
+    print("Using LOO:")
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "Tscan":
@@ -157,7 +157,7 @@ def LOO(comet_logger, config, data_loader_dict):
 
 def train_and_test(config, data_loader_dict):
     """trains the model."""
-
+    print("using train_and_test:")
     comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
         project_name="DST_RPPG",
         workspace="mno-93",
@@ -262,8 +262,8 @@ def test(config, data_loader_dict):
         model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
-    # model_trainer.test(data_loader_dict)
-
+    model_trainer.test(data_loader_dict)
+'''
     comet_logger = CometLogger(api_key="e82QHm7luQjCg2OelY5HP2jf5",
                                project_name="DST_rPPG",
                                workspace="mno-93",
@@ -277,7 +277,7 @@ def test(config, data_loader_dict):
     trainer_light = pl.Trainer(default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS)
 
     trainer_light.test(model_trainer, ckpt_path="/data/rppg_23_bi_video_nt_lab/processed/Models/CMBP_SizeW128_SizeH128_ClipLength160_DataTypeRaw_DataAugNone_LabelTypeStandardized_Crop_faceTrue_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len1_Median_face_boxFalse/CMBP_CMBP_CMBP_physformer_epoch=11.ckpt", dataloaders=data_loader_dict['test'])
-
+'''
 
 def unsupervised_method_inference(config, data_loader):
 
@@ -329,13 +329,16 @@ if __name__ == "__main__":
     parser = trainer.BaseTrainer.BaseTrainer.add_trainer_args(parser)
     parser = data_loader.BaseLoader.BaseLoader.add_data_loader_args(parser)
     args = parser.parse_args()
-
+    print("Parsed Arguments:", args)
     # configurations.
     config = get_config(args)
+
     print('Configuration:')
     print(config, end='\n\n')
+    print("Toolbox-Mode:", config.TOOLBOX_MODE)
     global CONFIG_FILE_NAME
     CONFIG_FILE_NAME = args.config_file
+    print("Config File Name:", CONFIG_FILE_NAME)
     data_loader_dict = dict() # dictionary of data loaders
     if config.TOOLBOX_MODE == "train_and_test":
         # train_loader
@@ -422,10 +425,11 @@ if __name__ == "__main__":
             data_loader_dict['valid'] = None
 
     if config.TOOLBOX_MODE == "preprocess":
-            print("done with preprocessing")
-
+        print("done with preprocessing")
+    print("Toolbox mode before if case:", config.TOOLBOX_MODE)
     if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "only_test":
         # test_loader
+        print("Toolbox Mode train and test or only test")
         if config.TEST.DATA.DATASET == "UBFC":
             test_loader = data_loader.UBFCLoader.UBFCLoader
         elif config.TEST.DATA.DATASET == "PURE":
@@ -437,6 +441,7 @@ if __name__ == "__main__":
         elif config.TEST.DATA.DATASET == "CMBP":
             test_loader = data_loader.CMBPLoader.CMBPLoader
         elif config.TEST.DATA.DATASET == "DST":
+            print("DST_Loader loading")
             test_loader = data_loader.DSTLoader.DSTLoader
         elif config.TEST.DATA.DATASET == "BP4DPlus":
             test_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
