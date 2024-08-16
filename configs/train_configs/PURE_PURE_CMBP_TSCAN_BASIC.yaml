@@ -3,8 +3,9 @@ TOOLBOX_MODE: "train_and_test"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 40
-  LR: 9e-3
-  MODEL_FILE_NAME: PURE_PURE_PURE_tscan_loo
+  LR: 1.0
+  USE_LR_FINDER: False
+  MODEL_FILE_NAME: PURE_PURE_CMBP_TSCAN
   DATA:
     SHUFFLE: True
     FS: 30
@@ -64,14 +65,14 @@ VALID:
         W: 36
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 25
     DATASET: CMBP
     DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -95,8 +96,8 @@ DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
   PATIENCE: 10
-  DELTA: 0.01
-  TRAIN: False
+  DELTA: 0.001
+  TRAIN: True
   VALID: False
 LOG:
   PATH: runs/exp
@@ -105,7 +106,7 @@ MODEL:
   NAME: Tscan
   TSCAN:
     FRAME_DEPTH: 10
-  MODEL_DIR: "/data/rppg_14_pure_video_nt_lab/processed/Models/"
+  MODEL_DIR: "/data/rppg_23_bi_video_nt_lab/rppg_processed/Models"    # Processed dataset save path, need to be updated
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"

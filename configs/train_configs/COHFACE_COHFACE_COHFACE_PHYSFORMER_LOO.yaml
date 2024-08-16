@@ -2,14 +2,15 @@ BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
+  EPOCHS: 25
   LR: 1e-4
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: COHFACE_COHFACE_COHFACE_physformer_loo
   DATA:
     FS: 20
     DATASET: COHFACE
     DO_PREPROCESS:  False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     #CACHED_PATH: "/homes/bacharya/rPPG-Toolbox/physformerData"    # Processed dataset save path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData"    # Processed dataset save path, need to be updated
@@ -40,7 +41,7 @@ VALID:
     FS: 20
     DATASET: COHFACE
     DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     #CACHED_PATH: "/homes/bacharya/rPPG-Toolbox/physformerData"    # Processed dataset save path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData"    # Processed dataset save path, need to be updated
@@ -67,12 +68,12 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 20
     DATASET: COHFACE
     DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_cohface_video_nt_lab/raw/"                     # Raw dataset path, need to be updated
     #CACHED_PATH: "/homes/bacharya/rPPG-Toolbox/physformerData"    # Processed dataset save path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData"    # Processed dataset save path, need to be updated

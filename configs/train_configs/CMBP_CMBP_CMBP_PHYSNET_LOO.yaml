@@ -3,16 +3,19 @@ TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 CLUSTER: True
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
+  EPOCHS: 15
   LR: 1e-4
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: CMBP_CMBP_CMBP_physnet_loo_raw_standardized
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: False # if first time, should be true
+    DO_PREPROCESS: True # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
+    #DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
+    #CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -24,8 +27,8 @@ TRAIN:
       CHUNK_LENGTH: 128
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
@@ -39,21 +42,23 @@ VALID:
     DATASET: CMBP
     DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
+    #DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
+    #CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.8
     END: 0.9
     PREPROCESS:
-      DATA_TYPE: [ 'Standardized']
+      DATA_TYPE: [ 'Raw']
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: Standardized
       DO_CHUNK: True
       CHUNK_LENGTH: 128
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
@@ -63,26 +68,28 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson', 'SNR']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 25
     DATASET: CMBP
     DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
+    #DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
+    #CACHED_PATH: "/vol/rPPG/physnetData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
-      DATA_TYPE: [ 'Standardized']
+      DATA_TYPE: [ 'Raw']
       LABEL_TYPE: Standardized
       DO_CHUNK: True
       CHUNK_LENGTH: 128
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1

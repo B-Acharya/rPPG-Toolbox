@@ -1,25 +1,25 @@
 BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
-FOLD: 8
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
+  EPOCHS: 25
   LR: 1e-4
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: PURE_PURE_PURE_physformer_loo
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS:  False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DO_PREPROCESS:  True # if first time, should be true
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
     PREPROCESS:
-      DATA_TYPE: [ 'Raw' ]
+      DATA_TYPE: [ 'DiffNormalized' ]
       DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: Standardized
+      LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:
@@ -38,16 +38,16 @@ VALID:
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DO_PREPROCESS: True # if first time, should be true
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.8
     END: 0.9
     PREPROCESS:
-      DATA_TYPE: [ 'Raw']
-      LABEL_TYPE: Standardized
+      DATA_TYPE: [ 'DiffNormalized']
+      LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:
@@ -63,20 +63,20 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: PURE
-    DO_PREPROCESS: False  # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DO_PREPROCESS: True # if first time, should be true
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/vol/rPPG/physformerData/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
-      DATA_TYPE: [ 'Raw']
-      LABEL_TYPE: Standardized
+      DATA_TYPE: [ 'DiffNormalized']
+      LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 160
       CROP_FACE:

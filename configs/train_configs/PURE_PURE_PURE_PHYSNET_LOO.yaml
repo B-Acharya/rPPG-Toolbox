@@ -2,8 +2,9 @@ BASE: ['']
 TOOLBOX_MODE: "LOO"  # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 30
-  LR: 9e-3
+  EPOCHS: 15
+  LR: 1e-4
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: PURE_PURE_PURE_physnet_loo_raw_standard
   DATA:
     FS: 30
@@ -23,8 +24,8 @@ TRAIN:
       CHUNK_LENGTH: 128                 #only support for factor of 512
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
@@ -51,8 +52,8 @@ VALID:
       CHUNK_LENGTH: 128                 #only support for factor of 512
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1
@@ -62,7 +63,7 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson', 'SNR']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: PURE
@@ -80,8 +81,8 @@ TEST:
       CHUNK_LENGTH: 128                 #only support for factor of 512
       CROP_FACE:
         DO_CROP_FACE: True
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
+        USE_LARGE_FACE_BOX: False
+        LARGE_BOX_COEF: 1.0
         DETECTION:
           DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 1

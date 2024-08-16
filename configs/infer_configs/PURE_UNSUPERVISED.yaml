@@ -1,8 +1,10 @@
 BASE: ['']
 TOOLBOX_MODE: "unsupervised_method"      # "train_and_test"  or "only_test" or "unsupervised_method"
 UNSUPERVISED:
-  METHOD: ["ICA", "POS", "CHROM", "GREEN", "LGI", "PBV"]
+#  METHOD: ["ICA", "POS", "CHROM", "GREEN","RED","BLUE", "LGI", "PBV"]
+  METHOD: ["RED","BLUE"]
   METRICS: ['MAE','RMSE','MAPE','Pearson', 'SNR']
+  OUT_SAVE_DIR: "/homes/bacharya/gp_rppg/dataset/PURE"
   DATA:
     FS: 30
     DATASET: PURE

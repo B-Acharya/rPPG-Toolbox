@@ -1,15 +1,17 @@
 BASE: ['']
 TOOLBOX_MODE: "unsupervised_method"      # "train_and_test"  or "only_test" or "unsupervised_method"
 UNSUPERVISED:
-  METHOD: ["ICA", "POS", "CHROM", "GREEN", "LGI", "PBV"]
+  METHOD: ["RED", "BLUE", "GREEN"]
+#  METHOD: ["ICA", "POS", "CHROM", "GREEN", "LGI", "PBV"]
   METRICS: ['MAE','RMSE','MAPE','Pearson']
+  OUT_SAVE_DIR: "/homes/bacharya/gp_rppg/dataset/"
   DATA:
     FS: 25
     DATASET: CMBP
     DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDHWC
-    DATA_PATH: "/data/rppg_22_bi_video_nt_lab/processed/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/data/rppg_22_bi_video_nt_lab/unsupervised/"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -31,5 +33,5 @@ UNSUPERVISED:
         H: 72
         W: 72
 INFERENCE:
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
 

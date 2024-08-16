@@ -2,8 +2,9 @@ BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
-  LR: 9e-3
+  EPOCHS: 24
+  LR: 1.0
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: COHFACE_COHFACE_COHFACE_tscan_loo
   DATA:
     FS: 20
@@ -33,7 +34,6 @@ TRAIN:
       RESIZE:
         H: 36
         W: 36
-
 VALID:
   DATA:
     FS: 20
@@ -64,7 +64,7 @@ VALID:
         W: 36
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 20
     DATASET: COHFACE
@@ -96,8 +96,8 @@ DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
   PATIENCE: 10
-  DELTA: 0.01
-  TRAIN: False
+  DELTA: 0.001
+  TRAIN: True
   VALID: False
 LOG:
   PATH: runs/exp
