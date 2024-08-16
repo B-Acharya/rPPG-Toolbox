@@ -1,13 +1,12 @@
 BASE: ['']
-TOOLBOX_MODE: "train_and_test"      # "train_and_test"  or "only_test"
+TOOLBOX_MODE: "train_and_test_enrich"      # "train_and_test"  or "only_test"
 TRAIN:
-  BATCH_SIZE: 4
-  EPOCHS: 32
+  BATCH_SIZE: 2
+  EPOCHS: 80
   LR: 1.0
-  MODEL_FILE_NAME: VIPL_VIPL_CMBP_tscan
   USE_LR_FINDER: False
+  MODEL_FILE_NAME: VIPL_PURE_DST
   DATA:
-    SHUFFLE: True
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS: False # if first time, should be true
@@ -20,7 +19,7 @@ TRAIN:
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: DiffNormalized
+      LABEL_TYPE: Standardized
       DO_CHUNK: True
       CHUNK_LENGTH: 900
       CROP_FACE:
@@ -32,68 +31,67 @@ TRAIN:
           DYNAMIC_DETECTION_FREQUENCY: 30
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
-        H: 36
-        W: 36
-
+        H: 72
+        W: 72
 VALID:
   DATA:
-    SHUFFLE: True
     FS: 30
-    DATASET: VIPL
-    DO_PREPROCESS: False # if first time, should be true
+    DATASET: PURE
+    DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NDCHW
-    DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
-    EXP_DATA_NAME: ""
-    BEGIN: 0.8
-    END: 1.0
-    PREPROCESS:
-      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE: DiffNormalized
-      DO_CHUNK: True
-      CHUNK_LENGTH: 900
-      CROP_FACE:
-        DO_CROP_FACE: False
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
-        DETECTION:
-          DO_DYNAMIC_DETECTION: False
-          DYNAMIC_DETECTION_FREQUENCY : 30
-          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
-      RESIZE:
-        H: 36
-        W: 36
-TEST:
-  METRICS: ['MAE','RMSE','MAPE']
-  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
-  DATA:
-    FS: 25
-    DATASET: CMBP
-    DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NDCHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
-#    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/processed"                     # Raw dataset path, need to be updated
-#    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/rppg_processed"    # Processed dataset save path, need to be updated
+    DATA_PATH: "/data/rppg_14_pure_video_nt_lab/raw/PURE/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_14_pure_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE:  DiffNormalized
+      DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
+      LABEL_TYPE: Standardized
       DO_CHUNK: True
-      CHUNK_LENGTH: 1500
+      CHUNK_LENGTH: 1800
       CROP_FACE:
         DO_CROP_FACE: False
         USE_LARGE_FACE_BOX: True
         LARGE_BOX_COEF: 1.5
         DETECTION:
           DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY: 30
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 72
+        W: 72
+TEST:
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  OUT_SAVE_DIR: "/homes/bacharya/rPPG-Toolbox/DST_results/TS-CAN/"
+  DATA:
+    FS: 25
+    DATASET: DST
+    DO_PREPROCESS: True # if first time, should be true
+    DATA_FORMAT: NDCHW
+    DATA_PATH: "/data/dst_tsst_22_bi_multi_nt_lab/processed/sensor_files.json"                     # Raw dataset path, need to be updated
+#    CACHED_PATH: "/data/dst_tsst_22_bi_multi_nt_lab/processed/rPPG"    # Processed dataset save path, need to be updated
+    CACHED_PATH : "/homes/bacharya/rPPG-Toolbox/DST_results/TS-CAN/"
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
+      LABEL_TYPE: Standardized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 2000
+      CROP_FACE:
+        DO_CROP_FACE: False
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION :
+          DO_DYNAMIC_DETECTION: False
           DYNAMIC_DETECTION_FREQUENCY : 30
           USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
       RESIZE:
-        H: 36
-        W: 36
+        H: 72
+        W: 72
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
@@ -108,8 +106,11 @@ MODEL:
   NAME: Tscan
   TSCAN:
     FRAME_DEPTH: 10
-  MODEL_DIR: "/data/rppg_18_vipl_video_nt_lab/processed/Models"
+  MODEL_DIR: "/homes/bacharya/rPPG-Toolbox/DST_results/TS-CAN/"
 INFERENCE:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 1
   EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: True # Change this if you'd like an evaluation window smaller than the test video length
+    WINDOW_SIZE: 30 # In seconds

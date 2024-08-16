@@ -3,12 +3,13 @@ TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 40
-  LR: 9e-3
+  LR: 1.0
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: VIPL_VIPL_VIPL_tscan_loo
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -37,7 +38,7 @@ VALID:
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -62,11 +63,11 @@ VALID:
         W: 36
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -93,8 +94,8 @@ DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
   PATIENCE: 10
-  DELTA: 0.01
-  TRAIN: False
+  DELTA: 0.001
+  TRAIN: True
   VALID: False
 LOG:
   PATH: runs/exp
@@ -106,5 +107,5 @@ MODEL:
   MODEL_DIR: "/data/rppg_18_vipl_video_nt_lab/processed/Models"
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""

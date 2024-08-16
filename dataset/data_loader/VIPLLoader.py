@@ -78,7 +78,7 @@ class VIPLLoader(BaseLoader):
                 source(list): list of sources to consider
         """
         if sources == None:
-            self.sources = ["source2"]
+            self.sources = ["source2", "source1", "source3"]
         else:
             self.sources = sources
 

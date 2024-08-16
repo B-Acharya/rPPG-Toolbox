@@ -3,14 +3,15 @@ TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
 FOLD: 0
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
+  EPOCHS: 25
   LR: 1e-4
+  USE_LR_FINDER: False
   MODEL_FILE_NAME: VIPL_VIPL_VIPL_physformer
   DATA:
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
@@ -39,7 +40,7 @@ VALID:
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
@@ -63,12 +64,12 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NCDHW
+    DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
@@ -111,5 +112,8 @@ MODEL:
     THETA: 0.7
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
+  EVALUATION_WINDOW:
+    USE_SMALLER_WINDOW: False # Change this if you'd like an evaluation window smaller than the test video length
+    WINDOW_SIZE: 10        # In seconds
   MODEL_PATH:   ""

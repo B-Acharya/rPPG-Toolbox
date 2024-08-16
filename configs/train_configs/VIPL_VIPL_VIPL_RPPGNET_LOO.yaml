@@ -1,18 +1,19 @@
 BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
-FOLD: 0
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 30
+  EPOCHS: 15
   LR: 1e-4
-  MODEL_FILE_NAME: VIPL_VIPL_VIPL_rppgnet
+  USE_LR_FINDER: False
+  MODEL_FILE_NAME: VIPL_VIPL_VIPL_rppgnet_loo
   DATA:
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+#    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -41,7 +42,8 @@ VALID:
     DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+#    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.8
     END: 0.9
@@ -64,14 +66,15 @@ VALID:
         W: 128
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: VIPL
     DO_PREPROCESS:  False # if first time, should be true
     DATA_FORMAT: NCDHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+#    CACHED_PATH: "/vol/rPPG/"    # Processed dataset save path, need to be updated
+    CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.9
     END: 1.0
@@ -97,7 +100,7 @@ NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
   PATIENCE: 10
   DELTA: 0.01
-  TRAIN: False
+  TRAIN: True
   VALID: False
 LOG:
   PATH: runs/exp
@@ -109,5 +112,5 @@ MODEL:
   MODEL_DIR: "/vol/rPPG/physformerData/Models"    # Processed dataset save path, need to be updated
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   MODEL_PATH:   ""

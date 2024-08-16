@@ -1,12 +1,14 @@
 BASE: ['']
 TOOLBOX_MODE: "unsupervised_method"      # "train_and_test"  or "only_test" or "unsupervised_method"
 UNSUPERVISED:
-  METHOD: ["ICA", "POS", "CHROM", "GREEN", "LGI", "PBV"]
+#  METHOD: ["ICA", "POS", "CHROM", "GREEN"]
+  METHOD: ["dummy"]
   METRICS: ['MAE','RMSE','MAPE','Pearson']
+  OUT_SAVE_DIR: "/homes/bacharya/rPPG-Toolbox/VIPL_results/"
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDHWC
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -31,4 +33,4 @@ UNSUPERVISED:
         H: 72
         W: 72
 INFERENCE:
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"

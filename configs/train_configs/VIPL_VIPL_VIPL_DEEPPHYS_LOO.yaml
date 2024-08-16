@@ -1,15 +1,16 @@
 BASE: ['']
 TOOLBOX_MODE: "LOO"      # "train_and_test"  or "only_test"
-FOLD: 5
+CLUSTER: True
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
-  LR: 9e-3
-  MODEL_FILE_NAME: VIPL_VIPL_VIPL_deepphys
+  EPOCHS: 32
+  LR: 1.0
+  USE_LR_FINDER: False
+  MODEL_FILE_NAME: VIPL_VIPL_VIPL_deepphys_diff
   DATA:
     FS: 30
     DATASET: VIPL
-    DO_PREPROCESS: False # if first time, should be true
+    DO_PREPROCESS: True # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_18_vipl_video_nt_lab/raw/unzipped/"                     # Raw dataset path, need to be updated
     CACHED_PATH: "/data/rppg_18_vipl_video_nt_lab/processed/"    # Processed dataset save path, need to be updated
@@ -19,7 +20,7 @@ TRAIN:
     PREPROCESS:
       DATA_TYPE: ['DiffNormalized','Standardized']
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: Standardized
+      LABEL_TYPE: DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 900
       CROP_FACE:
@@ -47,7 +48,7 @@ VALID:
     PREPROCESS:
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
-      LABEL_TYPE: Standardized
+      LABEL_TYPE:  DiffNormalized
       DO_CHUNK: True
       CHUNK_LENGTH: 900
       CROP_FACE:
@@ -63,7 +64,7 @@ VALID:
         W: 36
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson', 'SNR']
-  USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  USE_LAST_EPOCH: True # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 30
     DATASET: VIPL
@@ -100,8 +101,13 @@ MODEL:
   MODEL_DIR: "/data/rppg_18_vipl_video_nt_lab/processed/Models"
 INFERENCE:
   BATCH_SIZE: 4
-  EVALUATION_METHOD: "FFT"        # "FFT" or "peak detection"
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
   EVALUATION_WINDOW:
     USE_SMALLER_WINDOW: False        # Change this if you'd like an evaluation window smaller than the test video length
     WINDOW_SIZE: 10        # In seconds
   MODEL_PATH:   ""
+EARLY_STOPPING:
+  TRAIN: False
+  VALID: False
+  PATIENCE: 10
+  DELTA: 0.001
