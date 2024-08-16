@@ -48,18 +48,18 @@ class RandomHorizontalFlip(object):
 
     def __call__(self, video):
 
-        h, w = video.shape[2], video.shape[3]
-        clip_frames = video.shape[1]
-        new_video_x = np.zeros((3,clip_frames, h, w))
+        h, w = video.shape[1], video.shape[2]
+        clip_frames = video.shape[0]
+        new_video_x = np.zeros((clip_frames, h, w,3))
 
         p = random.random()
         if p < 0.5:
             # print('Flip')
             for i in range(clip_frames):
                 # video
-                image = video[ :, i, :, :]
+                image = video[ i, :, :, :]
                 image = cv2.flip(image, 1)
-                new_video_x[:,i , :, :] = image
+                new_video_x[i,:, :, :] = image
             return new_video_x
 
         else:
@@ -156,7 +156,7 @@ class BaseLoader(Dataset):
         # item_path_filename is simply the filename of the specific clip
         # For example, the preceding item_path's filename would be 501_input0.npy
         item_path_filename = item_path.split(os.sep)[-1]
-        # split_idx represents the point in the previous filename where we want to split the string 
+        #train split_idx represents the point in the previous filename where we want to split the string
         # in order to retrieve a more precise filename (e.g., 501) preceding the chunk (e.g., input0)
         split_idx = item_path_filename.rindex('_')
         # Following the previous comments, the filename for example would be 501
@@ -167,24 +167,23 @@ class BaseLoader(Dataset):
         if self.model == "PhysFormer":
 
             clip_average_HR = get_hr(label, sr=self.fs)
+            if self.dataset_name == "train":
+                p = random.random()
+                if p < 0.5:  # sampling aug     p < 0.5
+                    #augment the video
+                    data, label, clip_average_HR =self.get_single_video_x_aug(data, label, clip_average_HR)
+                if self.transform:
+                    data = self.transform(data)
 
-            p = random.random()
-
-            #TODO: check the implementation for up and down sampling turned off with 0
-            if p < 0:  # sampling aug     p < 0.5
-                #augment the video
-                data, label, clip_average_HR =self.get_single_video_x_aug(data, label, clip_average_HR)
-
-            if self.transform:
-                data = self.transform(data)
-
-            return data, label, filename, chunk_id, clip_average_HR
+            return np.transpose(data, (3,0,1,2)), label, filename, chunk_id, clip_average_HR
 
         return data, label, filename, chunk_id
 
+
     def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
 
-        clip_frames = data.shape[0]
+
+        clip_frames = data.shape[0] # 160
         data_x = np.zeros((clip_frames, 128, 128, 3))
         label_new = np.zeros(clip_frames)
 
@@ -216,7 +215,7 @@ class BaseLoader(Dataset):
 
         else:  # double
             clip_average_HR = clip_average_HR * 2
-            for tt in range(clip_frames):
+            for tt in range(clip_frames//2):
                 image_id = tt * 2
                 tmp_image = data[image_id]
 
@@ -227,10 +226,11 @@ class BaseLoader(Dataset):
                 data_x[tt, :, :, :] = image_x_aug
 
                 # approximation
-                if tt < 80:
-                    label_new[tt] = ecg_label[tt * 2]
-                else:
-                    label_new[tt] = label_new[tt - 80]
+                label_new[tt] = ecg_label[tt * 2]
+
+            #The upsampled fradatames are repeated to get 160
+            data_x[(clip_frames//2):, :,:,:] = data_x[:(clip_frames//2),:,:,:]
+            label_new[clip_frames//2:] = ecg_label[:clip_frames//2]
 
         return data_x, label_new, clip_average_HR
 
@@ -361,8 +361,10 @@ class BaseLoader(Dataset):
             if data_type == "Raw":
                 data.append(f_c)
             elif data_type == "DiffNormalized":
+                #DST dataset has ecg samples which need not be diffnormalized but the predictions from tscan need to be
                 data.append(BaseLoader.diff_normalize_data(f_c))
             elif data_type == "Standardized":
+                #DST dataset has ecg samples which need not be standardized but the predictions from tscan need to be
                 data.append(BaseLoader.standardized_data(f_c))
             elif data_type == "SkinSegmentation":
                 #import for skin segmation algorimths package by bob
@@ -381,9 +383,15 @@ class BaseLoader(Dataset):
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
-            bvps = BaseLoader.diff_normalize_label(bvps)
+            if self.infer_dataset == "DST":
+                pass
+            else:
+                bvps = BaseLoader.diff_normalize_label(bvps)
         elif config_preprocess.LABEL_TYPE == "Standardized":
-            bvps = BaseLoader.standardized_label(bvps)
+            if self.infer_dataset == "DST":
+                pass
+            else:
+                bvps = BaseLoader.standardized_label(bvps)
         else:
             raise ValueError("Unsupported label type!")
 
@@ -514,9 +522,25 @@ class BaseLoader(Dataset):
             bvp_clips: all chunks of bvp frames
         """
 
+        if self.infer_dataset == "DST":
+            label_frame_size = len(bvps)
+            if label_frame_size > 25000 and label_frame_size < 30000:
+                sampling_rate = 300
+            else:
+                sampling_rate = 1000
+
+            chunk_length_ecg = (chunk_length // self.fs) * sampling_rate
+            clip_num_ecg = bvps.shape[0] // chunk_length_ecg
+
         clip_num = frames.shape[0] // chunk_length
         frames_clips = [frames[i * chunk_length:(i + 1) * chunk_length] for i in range(clip_num)]
-        bvps_clips = [bvps[i * chunk_length:(i + 1) * chunk_length] for i in range(clip_num)]
+        if self.infer_dataset == "DST":
+            bvps_clips = [bvps[i * chunk_length_ecg:(i + 1) * chunk_length_ecg] for i in range(clip_num_ecg)]
+            print(clip_num_ecg, clip_num)
+            print(chunk_length_ecg, chunk_length, sampling_rate)
+        else:
+            bvps_clips = [bvps[i * chunk_length:(i + 1) * chunk_length] for i in range(clip_num)]
+
         return np.array(frames_clips), np.array(bvps_clips)
 
     def save(self, frames_clips, bvps_clips, filename):

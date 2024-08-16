@@ -8,7 +8,7 @@ import os
 import pathlib
 import re
 from multiprocessing import Pool, Process, Value, Array, Manager
-#import h5py
+import h5py
 import random
 
 import cv2
