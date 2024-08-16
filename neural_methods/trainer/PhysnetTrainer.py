@@ -39,7 +39,7 @@ class PhysnetTrainer(pl.LightningModule):
         self.model = PhysNet_padding_Encoder_Decoder_MAX(
             frames=config.MODEL.PHYSNET.FRAME_NUM).to(self.device)  # [3, T, 128,128]
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH":
             self.num_train_batches = len(data_loader["train"])
             self.loss_model = Neg_Pearson()
             # self.optimizer = optim.Adam(
@@ -171,10 +171,10 @@ class PhysnetTrainer(pl.LightningModule):
             self.parameters(), lr=self.lr, weight_decay=0.0)
 
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
-        return [optimizer], scheduler
-
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        #     optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
+        # return [optimizer], scheduler
+        return optimizer
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
