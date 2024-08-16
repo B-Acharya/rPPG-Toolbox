@@ -10,9 +10,21 @@ from scipy import signal
 from scipy import linalg
 from unsupervised_methods import utils
 
+def RED(frames):
+    precessed_data = utils.process_video(frames)
+    BVP = precessed_data[:, 0, :]
+    BVP = BVP.reshape(-1)
+    return BVP
 
 def GREEN(frames):
     precessed_data = utils.process_video(frames)
     BVP = precessed_data[:, 1, :]
     BVP = BVP.reshape(-1)
     return BVP
+
+def BLUE(frames):
+    precessed_data = utils.process_video(frames)
+    BVP = precessed_data[:, 2, :]
+    BVP = BVP.reshape(-1)
+    return BVP
+
