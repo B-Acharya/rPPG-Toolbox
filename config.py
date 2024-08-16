@@ -24,6 +24,7 @@ _C.TRAIN = CN()
 _C.TRAIN.EPOCHS = 50
 _C.TRAIN.BATCH_SIZE = 4
 _C.TRAIN.LR = 1e-4
+_C.TRAIN.USE_LR_FINDER = True
 # Optimizer
 _C.TRAIN.OPTIMIZER = CN()
 # Optimizer Epsilon
@@ -131,6 +132,7 @@ _C.VALID.DATA.PREPROCESS.RESIZE.H = 128
 _C.TEST = CN()
 _C.TEST.METRICS = []
 _C.TEST.USE_LAST_EPOCH = True
+_C.TEST.OUT_SAVE_DIR = "outputs"
 # Test.Data settings
 _C.TEST.DATA = CN()
 _C.TEST.DATA.SHUFFLE= False
@@ -181,6 +183,7 @@ _C.TEST.DATA.PREPROCESS.RESIZE.H = 128
 _C.UNSUPERVISED = CN()
 _C.UNSUPERVISED.METHOD = []
 _C.UNSUPERVISED.METRICS = []
+_C.UNSUPERVISED.OUT_SAVE_DIR = None
 # Unsupervised.Data settings
 _C.UNSUPERVISED.DATA = CN()
 _C.UNSUPERVISED.DATA.SHUFFLE = False
@@ -420,7 +423,7 @@ def update_config(config, args):
         raise ValueError('User specified TRAIN dataset FILE_LIST_PATH .csv file already exists. \
                          Please turn DO_PREPROCESS to False or delete existing TRAIN dataset FILE_LIST_PATH .csv file.')
 
-    if not config.TEST.USE_LAST_EPOCH and config.VALID.DATA.DATASET is not None:
+    if not config.TEST.USE_LAST_EPOCH and config.VALID.DATA.DATASET is not None or config.TOOLBOX_MODE == "ENRICH":
         # UPDATE VALID PATHS
         if config.VALID.DATA.FILE_LIST_PATH == default_VALID_FILE_LIST_PATH:
             config.VALID.DATA.FILE_LIST_PATH = os.path.join(config.VALID.DATA.CACHED_PATH, 'DataFileLists')

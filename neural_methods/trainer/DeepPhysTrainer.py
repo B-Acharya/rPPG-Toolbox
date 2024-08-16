@@ -35,7 +35,7 @@ class DeepPhysTrainer(pl.LightningModule):
         self.predictions = dict()
         self.labels = dict()
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH":
             self.model = DeepPhys(img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 
@@ -146,17 +146,18 @@ class DeepPhysTrainer(pl.LightningModule):
 
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(
-            self.parameters(), lr=self.lr, weight_decay=0)
-
-        # optimizer = optim.Adadelta(
+        # optimizer = optim.AdamW(
         #     self.parameters(), lr=self.lr, weight_decay=0)
 
+        optimizer = optim.Adadelta(self.parameters(), lr=self.lr )
+        #since the paper used 1.0 as the learning rate for deepphys this was adapted from the toolbox to 1.0
+        # optimizer = optim.Adadelta(self.parameters(), lr=1.0 )
+
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
-        return [optimizer], scheduler
-        # return optimizer
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        #     optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
+        # return [optimizer], scheduler
+        return optimizer
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
@@ -164,3 +165,23 @@ class DeepPhysTrainer(pl.LightningModule):
         model_path = os.path.join(
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
         torch.save(self.model.state_dict(), model_path)
+
+    def load_model(self, path):
+        self.model.load_state_dict(self._rename_module(torch.load(path, map_location=self.device )))
+        print('Model Created!')
+
+    def _rename_module(self, torch_dict):
+        new_dict = OrderedDict()
+        keys = torch_dict.keys()
+        for key in keys:
+            new_key = ".".join(key.split(".")[1:])
+            new_dict[new_key] = torch_dict[key]
+        return new_dict
+
+    def check_weights(self):
+        for param in self.model.parameters():
+            print(param.data)
+
+    def const_init(self, fill=0.0):
+        for name, param in self.model.named_parameters():
+            param.data.fill_(fill)

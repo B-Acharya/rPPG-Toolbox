@@ -159,7 +159,7 @@ def calculate_HR(bvp, fs=30, high_pass=2.5, diff_flag=False, use_bandpass=True, 
         # equals [45, 150] beats per min
         print("using:", high_pass)
         # [b, a] = butter(1, [0.75 / fs * 2, 2.5 / fs * 2], btype='bandpass')
-        [b, a] = butter(1, [0.75 / fs * 2, 3 / fs * 2], btype='bandpass')
+        [b, a] = butter(1, [0.75 / fs * 2, high_pass / fs * 2], btype='bandpass')
         predictions = scipy.signal.filtfilt(b, a, np.double(predictions))
     if hr_method == 'FFT':
         hr_pred = _calculate_fft_hr(predictions, fs=fs)
