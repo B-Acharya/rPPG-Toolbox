@@ -7,10 +7,70 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 from evaluation.BlandAltmanPy import BlandAltman
+from unsupervised_methods.utils import ecg_processing
+
+
+def metrics_calculations(ground_truth, predictions, SNR, config, logger ):
+
+    ground_truth = np.array(ground_truth)
+    predictions = np.array(predictions)
+    SNR = np.array(SNR)
+    num_test_samples = len(predictions)
+    method = config.INFERENCE.EVALUATION_METHOD
+    filename_id = config.TRAIN.MODEL_FILE_NAME
+
+    if config.TOOLBOX_MODE == "unsupervised_method":
+        metrics = config.UNSUPERVISED.METRICS
+    else:
+        metrics = config.TEST.METRICS
+
+    for metric in metrics:
+        if metric == "MAE":
+            MAE = np.mean(np.abs(predictions - ground_truth))
+            standard_error = np.std(np.abs(predictions - ground_truth)) / np.sqrt(num_test_samples)
+            print("{2} MAE : {0} +/- {1}".format(MAE, standard_error, method))
+            logger.log_metrics({"MAE": MAE})
+        elif metric == "RMSE":
+            RMSE = np.sqrt(np.mean(np.square(predictions - ground_truth)))
+            standard_error = np.std(np.square(predictions - ground_truth)) / np.sqrt(num_test_samples)
+            print("{2} RMSE : {0} +/- {1}".format(RMSE, standard_error, method))
+            logger.log_metrics({"RMSE": RMSE})
+        elif metric == "MAPE":
+            MAPE = np.mean(np.abs((predictions - ground_truth) / ground_truth)) * 100
+            standard_error = np.std(np.abs((predictions - ground_truth) / ground_truth)) / np.sqrt(
+                num_test_samples) * 100
+            print("{2} MAPE : {0} +/- {1}".format(MAPE, standard_error, method))
+            logger.log_metrics({"MAPE": MAPE})
+        elif metric == "Pearson":
+            Pearson = np.corrcoef(predictions, ground_truth)
+            correlation_coefficient = Pearson[0][1]
+            standard_error = np.sqrt((1 - correlation_coefficient ** 2) / (num_test_samples - 2))
+            print("{2} Pearson : {0} +/- {1}".format(correlation_coefficient, standard_error, method))
+            logger.log_metrics({"Pearson": Pearson})
+        elif metric == "SNR":
+            SNR = np.mean(SNR)
+            standard_error = np.std(SNR) / np.sqrt(num_test_samples)
+            print("{2} SNR : {0} +/- {1}".format(SNR, standard_error, method))
+            logger.log_metrics({"SNR": SNR})
+        else:
+            raise ValueError("Wrong Test Metric Type")
+    compare = BlandAltman(ground_truth, predictions, config, logger=logger, averaged=True)
+    compare.scatter_plot(
+        x_label='GT PPG HR [bpm]',
+        y_label='rPPG HR [bpm]',
+        show_legend=True, figure_size=(5, 5),
+        the_title=f'{filename_id}_peak_BlandAltman_ScatterPlot',
+        file_name=f'{filename_id}_peak_BlandAltman_ScatterPlot.pdf')
+    compare.difference_plot(
+        x_label='Difference between rPPG HR and GT PPG HR [bpm]',
+        y_label='Average of rPPG HR and GT PPG HR [bpm]',
+        show_legend=True, figure_size=(5, 5),
+        the_title=f'{filename_id}_peak_BlandAltman_DifferencePlot',
+        file_name=f'{filename_id}_peak_BlandAltman_DifferencePlot.pdf')
 
 def save_test_outputs( predictions, labels, config, method_name):
-    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test':
-        output_dir = config.TEST.OUTPUT_SAVE_DIR
+    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "train_and_test_enrich":
+        output_dir = config.TEST.OUT_SAVE_DIR
     else:
         output_dir = config.UNSUPERVISED.DATA.CACHED_PATH
 
@@ -18,14 +78,13 @@ def save_test_outputs( predictions, labels, config, method_name):
         os.makedirs(output_dir, exist_ok=True)
 
     # Filename ID to be used in any output files that get saved
-    if config.TOOLBOX_MODE == 'train_and_test':
-        filename_id = config.MODEL
+    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich":
+        filename_id = config.TRAIN.MODEL_FILE_NAME
     elif config.TOOLBOX_MODE == 'only_test':
         model_file_root = config.INFERENCE.MODEL_PATH.split("/")[-1].split(".pth")[0]
         filename_id = model_file_root + "_" + config.TEST.DATA.DATASET
     elif config.TOOLBOX_MODE == 'unsupervised_method':
         filename_id = method_name
-
     else:
         raise ValueError('Metrics.py evaluation only supports train_and_test and only_test!')
     output_path = os.path.join(output_dir, filename_id + '_outputs.pickle')
@@ -40,6 +99,7 @@ def save_test_outputs( predictions, labels, config, method_name):
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print('Saving outputs to:', output_path)
+    return output_dir
 
 def calcualte_mae_per_setting(dataframe):
     mae = np.mean(np.abs(dataframe["HR_GT"] - dataframe["HR_Pred"]))
@@ -127,19 +187,44 @@ def _reform_data_from_dict(data):
     return np.reshape(sort_data.cpu(), (-1))
 
 
-def calculate_metrics(predictions, labels, config, logger, save_outputs=True):
+def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_outputs=True):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
-    predict_hr_fft_all = list()
-    gt_hr_fft_all = list()
-    predict_hr_peak_all = list()
+    pred_hr_all = list()
+    gt_hr_all = list()
+    predict_hr__all = list()
     gt_hr_peak_all = list()
     SNR_all = list()
-    gt_hr_fft_dict = dict()
-    pred_hr_fft_dict = dict()
     predictions_dict = dict()
+
+    if config.TEST.DATA.DATASET == "DST":
+        DST = True
+    else:
+        DST = False
+
     for index in tqdm(predictions.keys(), ncols=80):
         prediction = _reform_data_from_dict(predictions[index])
         label = _reform_data_from_dict(labels[index])
+
+        if len(label) == 0:
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            print("ECG data missing, please check")
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            print("--------------")
+            continue
+        if DST:
+            # TODO: should be changed and moved to dataloader, bit hacky
+            label_frame_size = len(label)
+            if label_frame_size > 25000 and label_frame_size < 30000:
+                sampling_rate = 300
+            else:
+                sampling_rate = 1000
 
         video_frame_size = prediction.shape[0]
         print("Video frame size", video_frame_size, index)
@@ -147,12 +232,18 @@ def calculate_metrics(predictions, labels, config, logger, save_outputs=True):
             window_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE * config.TEST.DATA.FS
             if window_frame_size > video_frame_size:
                 window_frame_size = video_frame_size
+            if DST:
+                label_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE * sampling_rate
         else:
             window_frame_size = video_frame_size
 
         for i in range(0, len(prediction), window_frame_size):
             pred_window = prediction[i:i+window_frame_size]
-            label_window = label[i:i+window_frame_size]
+            if DST:
+                j = (i // config.TEST.DATA.FS) * sampling_rate
+                label_window = label[j:j + label_frame_size]
+            else:
+                label_window = label[i:i+window_frame_size]
 
             if len(pred_window) < 9:
                 print(f"Window frame size of {len(pred_window)} is smaller than minimum pad length of 9. Window ignored!")
@@ -167,135 +258,60 @@ def calculate_metrics(predictions, labels, config, logger, save_outputs=True):
                 raise ValueError("Unsupported label type in testing!")
             
             if config.INFERENCE.EVALUATION_METHOD == "peak detection":
-                gt_hr_peak, pred_hr_peak, SNR = calculate_metric_per_video(
-                    prediction, label, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='Peak')
-                gt_hr_peak_all.append(gt_hr_peak)
-                predict_hr_peak_all.append(pred_hr_peak)
-                SNR_all.append(SNR)
-                predictions_dict[index] = {"GT_HR": gt_hr_peak, "Pred_HR": pred_hr_peak}
+                if DST:
+                    pre_hr = calculate_HR(pred_window, fs=config.TEST.DATA.FS, diff_flag=diff_flag_test, hr_method='Peak')
+                    gt_hr = ecg_processing(label_window, sampling_rate=sampling_rate)
+                else:
+                    gt_hr, pre_hr, SNR = calculate_metric_per_video(
+                        pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='Peak')
             elif config.INFERENCE.EVALUATION_METHOD == "FFT":
-                gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
-                    prediction, label, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
-                gt_hr_fft_all.append(gt_hr_fft)
-                predict_hr_fft_all.append(pred_hr_fft)
-                SNR_all.append(SNR)
-                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
+                if DST:
+                    pre_hr = calculate_HR(pred_window, fs=config.TEST.DATA.FS, diff_flag=diff_flag_test, hr_method='FFT')
+                    gt_hr = ecg_processing(label_window, sampling_rate=sampling_rate)
+                else:
+                    gt_hr, pre_hr, SNR = calculate_metric_per_video(
+                        pred_window, label_window, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
             elif config.INFERENCE.EVALUATION_METHOD == "Welch":
-                gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
-                    prediction, label, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='FFT')
-                gt_hr_fft_all.append(gt_hr_fft)
-                predict_hr_fft_all.append(pred_hr_fft)
-                SNR_all.append(SNR)
-                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
-            elif config.INFERENCE.EVALUATION_METHOD == "Welch_fft":
-                gt_hr_fft, pred_hr_fft, SNR = calculate_metric_per_video(
-                    prediction, label, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='Welch')
-                gt_hr_fft_all.append(gt_hr_fft)
-                predict_hr_fft_all.append(pred_hr_fft)
-                SNR_all.append(SNR)
-                predictions_dict[index] = {"GT_HR": gt_hr_fft, "Pred_HR": pred_hr_fft}
+                if DST:
+                    pre_hr = calculate_HR(pred_window, fs=config.TEST.DATA.FS, diff_flag=diff_flag_test,
+                                          hr_method='Welch')
+                    gt_hr = ecg_processing(label_window, sampling_rate=sampling_rate)
+                else:
+                    gt_hr, pre_hr, SNR = calculate_metric_per_video(
+                        pred_window, label_window, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, hr_method='Welch')
             else:
                 raise ValueError("Inference evaluation method name wrong!")
 
-            for metric in config.TEST.METRICS:
-                if metric == "MAE":
-                    MAE = np.mean(np.abs(gt_hr_fft - pred_hr_fft))
-                    print("FFT MAE (FFT Label): {0} ".format(MAE))
-                    logger.log_metrics({index:MAE} )
+            gt_hr_all.append(gt_hr)
+            pred_hr_all.append(pre_hr)
+            if not DST:
+                SNR_all.append(SNR)
+
+            predictions_dict[str(i)+"_"+index] = {"GT_HR":gt_hr, "Pred_HR":pre_hr}
+    print(gt_hr_all)
+    print(pred_hr_all)
+    print(predictions_dict)
+
+    if config.MODEL.NAME == "Mean":
+        print("Running mean predicition")
+        for key in predictions_dict.keys():
+            predictions_dict[key]["Pred_HR"] = mean_HR
+        for i in range(len(pred_hr_all)):
+            pred_hr_all[i] = mean_HR
+
     log_HR_HR_plot(logger, predictions_dict)
     plot_bland(logger, predictions_dict)
     filename_id = config.TRAIN.MODEL_FILE_NAME
 
+
+    dataframe = pd.DataFrame.from_dict(predictions_dict).T
     if save_outputs:
-        save_test_outputs(predictions, labels, config, method_name)
+        out_dir = save_test_outputs(predictions, labels, config, filename_id)
+        dataframe.to_csv(f"{out_dir}/{config.MODEL.NAME}_{config.TRAIN.MODEL_FILE_NAME}_{config.INFERENCE.EVALUATION_METHOD}.csv")
 
-    if config.INFERENCE.EVALUATION_METHOD == "FFT" or config.INFERENCE.EVALUATION_METHOD == "Welch" or config.INFERENCE.EVALUATION_METHOD == "Welch_fft":
-        gt_hr_fft_all = np.array(gt_hr_fft_all)
-        predict_hr_fft_all = np.array(predict_hr_fft_all)
-        SNR_all = np.array(SNR_all)
-        num_test_samples = len(predict_hr_fft_all)
-        for metric in config.TEST.METRICS:
-            if metric == "MAE":
-                MAE_FFT = np.mean(np.abs(predict_hr_fft_all - gt_hr_fft_all))
-                standard_error = np.std(np.abs(predict_hr_fft_all - gt_hr_fft_all)) / np.sqrt(num_test_samples)
-                print("FFT MAE (FFT Label): {0} +/- {1}".format(MAE_FFT, standard_error))
-                logger.log_metrics({"FFT MAE": MAE_FFT, "FFT MAE std":standard_error})
-            elif metric == "RMSE":
-                RMSE_FFT = np.sqrt(np.mean(np.square(predict_hr_fft_all - gt_hr_fft_all)))
-                standard_error = np.std(np.square(predict_hr_fft_all - gt_hr_fft_all)) / np.sqrt(num_test_samples)
-                print("FFT RMSE (FFT Label): {0} +/- {1}".format(RMSE_FFT, standard_error))
-                logger.log_metrics({"FFT RMSE": RMSE_FFT, "FFT RMSE std":standard_error})
-            elif metric == "MAPE":
-                MAPE_FFT = np.mean(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) * 100
-                standard_error = np.std(np.abs((predict_hr_fft_all - gt_hr_fft_all) / gt_hr_fft_all)) / np.sqrt(num_test_samples) * 100
-                print("FFT MAPE (FFT Label): {0} +/- {1}".format(MAPE_FFT, standard_error))
-                logger.log_metrics({"FFT MAPE": MAPE_FFT, "FFT MAPE std":standard_error})
-            elif metric == "Pearson":
-                Pearson_FFT = np.corrcoef(predict_hr_fft_all, gt_hr_fft_all)
-                correlation_coefficient = Pearson_FFT[0][1]
-                standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
-                print("FFT Pearson (FFT Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
-                logger.log_metrics({"FFT Pearson ": correlation_coefficient, "FFT Pearson std": standard_error})
+    logger.experiment.log_dataframe_profile(dataframe, "whole-data")
 
-            elif metric == "SNR":
-                SNR_FFT = np.mean(SNR_all)
-                standard_error = np.std(SNR_all) / np.sqrt(num_test_samples)
-                print("FFT SNR (FFT Label): {0} +/- {1}".format(SNR_FFT, standard_error))
-                logger.log_metrics({"FFT SNR_FFT": SNR_FFT, "FFT SNR std": standard_error})
-            else:
-                raise ValueError("Wrong Test Metric Type")
-
-        compare = BlandAltman(gt_hr_fft_all, predict_hr_fft_all, config, logger=logger, averaged=True)
-        try:
-            compare.scatter_plot(
-                x_label='GT PPG HR [bpm]',
-                y_label='rPPG HR [bpm]',
-                show_legend=True, figure_size=(5, 5),
-                the_title=f'{filename_id}_FFT_BlandAltman_ScatterPlot',
-                file_name=f'{filename_id}_FFT_BlandAltman_ScatterPlot.pdf')
-        except:
-            print("Plot not available")
-        try:
-            compare.difference_plot(
-                x_label='Difference between rPPG HR and GT PPG HR [bpm]',
-                y_label='Average of rPPG HR and GT PPG HR [bpm]',
-                show_legend=True, figure_size=(5, 5),
-                the_title=f'{filename_id}_FFT_BlandAltman_DifferencePlot',
-                file_name=f'{filename_id}_FFT_BlandAltman_DifferencePlot.pdf')
-        except:
-            print("Difference plot not available")
-
-    elif config.INFERENCE.EVALUATION_METHOD == "peak detection":
-        gt_hr_peak_all = np.array(gt_hr_peak_all)
-        predict_hr_peak_all = np.array(predict_hr_peak_all)
-        SNR_all = np.array(SNR_all)
-        num_test_samples = len(predict_hr_peak_all)
-        for metric in config.TEST.METRICS:
-            if metric == "MAE":
-                MAE_PEAK = np.mean(np.abs(predict_hr_peak_all - gt_hr_peak_all))
-                standard_error = np.std(np.abs(predict_hr_peak_all - gt_hr_peak_all)) / np.sqrt(num_test_samples)
-                print("Peak MAE (Peak Label): {0} +/- {1}".format(MAE_PEAK, standard_error))
-            elif metric == "RMSE":
-                RMSE_PEAK = np.sqrt(np.mean(np.square(predict_hr_peak_all - gt_hr_peak_all)))
-                standard_error = np.std(np.square(predict_hr_peak_all - gt_hr_peak_all)) / np.sqrt(num_test_samples)
-                print("PEAK RMSE (Peak Label): {0} +/- {1}".format(RMSE_PEAK, standard_error))
-            elif metric == "MAPE":
-                MAPE_PEAK = np.mean(np.abs((predict_hr_peak_all - gt_hr_peak_all) / gt_hr_peak_all)) * 100
-                standard_error = np.std(np.abs((predict_hr_peak_all - gt_hr_peak_all) / gt_hr_peak_all)) / np.sqrt(num_test_samples) * 100
-                print("PEAK MAPE (Peak Label): {0} +/- {1}".format(MAPE_PEAK, standard_error))
-            elif metric == "Pearson":
-                Pearson_PEAK = np.corrcoef(predict_hr_peak_all, gt_hr_peak_all)
-                correlation_coefficient = Pearson_PEAK[0][1]
-                standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
-                print("PEAK Pearson (Peak Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
-            elif metric == "SNR":
-                SNR_PEAK = np.mean(SNR_all)
-                standard_error = np.std(SNR_all) / np.sqrt(num_test_samples)
-                print("FFT SNR (FFT Label): {0} +/- {1}".format(SNR_PEAK, standard_error))
-            else:
-                raise ValueError("Wrong Test Metric Type")
-    else:
-        raise ValueError("Inference evaluation method name wrong!")
+    metrics_calculations(gt_hr_all, pred_hr_all, SNR_all, config, logger)
 
     if config.TEST.DATA.DATASET == "CMBP":
         result = {'LowHR_Bright': {}, 'LowHR_Dark': {}, 'HighHR_Dark': {}, 'HighHR_Bright': {}}

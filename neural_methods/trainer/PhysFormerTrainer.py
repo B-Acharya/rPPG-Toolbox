@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import torch
+from collections import OrderedDict
 import torch.optim as optim
 from evaluation.metrics import calculate_metrics
 from neural_methods.loss.PhysFormerLossComputer import TorchLossComputer
@@ -11,6 +12,7 @@ from neural_methods.loss.PhysNetNegPearsonLoss import Neg_Pearson
 import lightning.pytorch as pl
 from scipy.signal import welch
 import math
+
 
 
 class PhysFormerTrainer(pl.LightningModule):
@@ -53,7 +55,7 @@ class PhysFormerTrainer(pl.LightningModule):
 
         self.hrs = []
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH":
             self.model = ViT_ST_ST_Compact3_TDC_gra_sharp(
                 image_size=(
                     self.chunk_len, config.TRAIN.DATA.PREPROCESS.RESIZE.H, config.TRAIN.DATA.PREPROCESS.RESIZE.W),
@@ -67,7 +69,9 @@ class PhysFormerTrainer(pl.LightningModule):
             self.criterion_Pearson = Neg_Pearson()
 
         elif config.TOOLBOX_MODE == "only_test":
-            pass
+            self.model = ViT_ST_ST_Compact3_TDC_gra_sharp(image_size=(self.chunk_len, config.TRAIN.DATA.PREPROCESS.RESIZE.H, config.TRAIN.DATA.PREPROCESS.RESIZE.W),patches=(self.patch_size,) * 3, dim=self.dim, ff_dim=self.ff_dim, num_heads=self.num_heads,
+                num_layers=self.num_layers,
+                dropout_rate=self.dropout_rate, theta=self.theta).to(self.device)
         else:
             raise ValueError("PhysNet trainer initialized in incorrect toolbox mode!")
 
@@ -76,10 +80,7 @@ class PhysFormerTrainer(pl.LightningModule):
         if batch is None:
             raise ValueError("No data for train")
 
-
-        hr_old = torch.tensor([self.get_hr(i.cpu()) for i in batch[1]]).float().to(self.device)
         hr = torch.tensor([i for i in batch[-1]]).to(self.device)
-        print(hr, hr_old)
         data, label = batch[0].float().to(self.device), batch[1].float().to(self.device)
 
         gra_sharp = 2.0
@@ -130,21 +131,6 @@ class PhysFormerTrainer(pl.LightningModule):
                   f'hr_mae:{np.mean(self.loss_hr_mae[-2000:]):.3f}')
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, batch_size=self.batch_size)
-        # if not self.config.TEST.USE_LAST_EPOCH:
-        #     valid_loss = self.valid(data_loader)
-        #     print(f'Validation RMSE:{valid_loss:.3f}, batch:{idx + 1}')
-        #     if self.min_valid_loss is None:
-        #         self.min_valid_loss = valid_loss
-        #         self.best_epoch = epoch
-        #         print("Update best model! Best epoch: {}".format(self.best_epoch))
-        #     elif (valid_loss < self.min_valid_loss):
-        #         self.min_valid_loss = valid_loss
-        #         self.best_epoch = epoch
-        #         print("Update best model! Best epoch: {}".format(self.best_epoch))
-        # if not self.config.TEST.USE_LAST_EPOCH:
-        #     print("best trained epoch: {}, min_val_loss: {}".format(
-        #         self.best_epoch, self.min_valid_loss))
-
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -212,10 +198,11 @@ class PhysFormerTrainer(pl.LightningModule):
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=0.00005)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=5e-5)
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
-        return [optimizer], scheduler
+        # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+        # return [optimizer], scheduler
+        return optimizer
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
@@ -224,6 +211,18 @@ class PhysFormerTrainer(pl.LightningModule):
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
         torch.save(self.model.state_dict(), model_path)
         print('Saved Model Path: ', model_path)
+
+    def load_model(self, path):
+        self.model.load_state_dict(self._rename_module(torch.load(path, map_location=self.device )))
+        print('Model Created!')
+
+    def _rename_module(self, torch_dict):
+        new_dict = OrderedDict()
+        keys = torch_dict.keys()
+        for key in keys:
+            new_key = ".".join(key.split(".")[1:])
+            new_dict[new_key] = torch_dict[key]
+        return new_dict
 
     def get_hr(self, y, sr=30, min=30, max=180):
         p, q = welch(y, sr, nfft=1e5 / sr, nperseg=np.min((len(y) - 1, 256)))
