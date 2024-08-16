@@ -185,14 +185,16 @@ class DSTLoader(BaseLoader):
         print("os path exists", os.path.exists(video_path))
         frames = self.read_video(video_path_converted)
         ecgs = self.read_wave(ecg_df)
+
         print("frame shape", frames.shape)
         print("bvps shape", ecgs.shape)
         target_length = frames.shape[0]
-        ecgs = BaseLoader.resample_ppg(ecgs, target_length)
 
+        # ecgs = BaseLoader.resample_ppg(ecgs, target_length)
         frames_clips, bvps_clips = self.preprocess(frames, ecgs, config_preprocess)
+
         #overide ecg to HR
-        input_name_list, label_name_list = self.save_multi_process(frames_clips, hr , saved_filename)
+        input_name_list, label_name_list = self.save_multi_process(frames_clips, ecgs, saved_filename)
         file_list_dict[i] = input_name_list
 
     @staticmethod
