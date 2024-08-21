@@ -32,7 +32,7 @@ class EfficientPhysTrainer(BaseTrainer):
         self.min_valid_loss = None
         self.best_epoch = 0
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test":
+        if config.TOOLBOX_MODE == "train_and_test":
             self.model = EfficientPhys(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(
                 self.device)
             self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
@@ -56,6 +56,9 @@ class EfficientPhysTrainer(BaseTrainer):
         if data_loader["train"] is None:
             raise ValueError("No data for train")
 
+        mean_training_losses = []
+        mean_valid_losses = []
+        lrs = []
         for epoch in range(self.max_epoch_num):
             print('')
             print(f"====Training Epoch: {epoch}====")
@@ -80,6 +83,10 @@ class EfficientPhysTrainer(BaseTrainer):
                 pred_ppg = self.model(data)
                 loss = self.criterion(pred_ppg, labels)
                 loss.backward()
+
+                # Append the current learning rate to the list
+                lrs.append(self.scheduler.get_last_lr())
+
                 self.optimizer.step()
                 self.scheduler.step()
                 running_loss += loss.item()
@@ -89,9 +96,14 @@ class EfficientPhysTrainer(BaseTrainer):
                     running_loss = 0.0
                 train_loss.append(loss.item())
                 tbar.set_postfix(loss=loss.item())
+
+            # Append the mean training loss for the epoch
+            mean_training_losses.append(np.mean(train_loss))
+
             self.save_model(epoch)
             if not self.config.TEST.USE_LAST_EPOCH: 
                 valid_loss = self.valid(data_loader)
+                mean_valid_losses.append(valid_loss)
                 print('validation loss: ', valid_loss)
                 if self.min_valid_loss is None:
                     self.min_valid_loss = valid_loss
@@ -103,6 +115,8 @@ class EfficientPhysTrainer(BaseTrainer):
                     print("Update best model! Best epoch: {}".format(self.best_epoch))
         if not self.config.TEST.USE_LAST_EPOCH: 
             print("best trained epoch: {}, min_val_loss: {}".format(self.best_epoch, self.min_valid_loss))
+        if self.config.TRAIN.PLOT_LOSSES_AND_LR:
+            self.plot_losses_and_lrs(mean_training_losses, mean_valid_losses, lrs, self.config)
 
     def valid(self, data_loader):
         """ Model evaluation on the validation dataset."""
@@ -167,8 +181,9 @@ class EfficientPhysTrainer(BaseTrainer):
 
         self.model = self.model.to(self.config.DEVICE)
         self.model.eval()
+        print("Running model evaluation on the testing dataset!")
         with torch.no_grad():
-            for _, test_batch in enumerate(data_loader['test']):
+            for _, test_batch in enumerate(tqdm(data_loader["test"], ncols=80)):
                 batch_size = test_batch[0].shape[0]
                 data_test, labels_test = test_batch[0].to(
                     self.config.DEVICE), test_batch[1].to(self.config.DEVICE)
@@ -181,6 +196,11 @@ class EfficientPhysTrainer(BaseTrainer):
                 data_test = torch.cat((data_test, last_frame), 0)
                 labels_test = labels_test[:(N * D) // self.base_len * self.base_len]
                 pred_ppg_test = self.model(data_test)
+
+                if self.config.TEST.OUTPUT_SAVE_DIR:
+                    labels_test = labels_test.cpu()
+                    pred_ppg_test = pred_ppg_test.cpu()
+
                 for idx in range(batch_size):
                     subj_index = test_batch[2][idx]
                     sort_index = int(test_batch[3][idx])
@@ -192,6 +212,8 @@ class EfficientPhysTrainer(BaseTrainer):
 
         print('')
         calculate_metrics(predictions, labels, self.config)
+        if self.config.TEST.OUTPUT_SAVE_DIR: # saving test outputs
+            self.save_test_outputs(predictions, labels, self.config)
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):

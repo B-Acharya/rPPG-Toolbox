@@ -34,6 +34,7 @@ _C.TRAIN.OPTIMIZER.BETAS = (0.9, 0.999)
 # SGD momentum
 _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 _C.TRAIN.MODEL_FILE_NAME = ''
+_C.TRAIN.PLOT_LOSSES_AND_LR = True
 # Train.Data settings
 _C.TRAIN.DATA = CN()
 _C.TRAIN.DATA.SHUFFLE= False
@@ -46,6 +47,11 @@ _C.TRAIN.DATA.INFO.GENDER = ['']
 _C.TRAIN.DATA.INFO.GLASSER = [True]
 _C.TRAIN.DATA.INFO.HAIR_COVER = [True]
 _C.TRAIN.DATA.INFO.MAKEUP = [True]
+_C.TRAIN.DATA.FILTERING = CN()
+_C.TRAIN.DATA.FILTERING.USE_EXCLUSION_LIST = False
+_C.TRAIN.DATA.FILTERING.EXCLUSION_LIST = ['']
+_C.TRAIN.DATA.FILTERING.SELECT_TASKS = False
+_C.TRAIN.DATA.FILTERING.TASK_LIST = ['']
 _C.TRAIN.DATA.FS = 0
 _C.TRAIN.DATA.DATA_PATH = ''
 _C.TRAIN.DATA.SPLIT_PATH = None #used for cohface dataset
@@ -57,6 +63,9 @@ _C.TRAIN.DATA.DO_PREPROCESS = False
 _C.TRAIN.DATA.DATA_FORMAT = 'NDCHW'
 _C.TRAIN.DATA.BEGIN = 0.0
 _C.TRAIN.DATA.END = 1.0
+_C.TRAIN.DATA.FOLD = CN()
+_C.TRAIN.DATA.FOLD.FOLD_NAME = ''
+_C.TRAIN.DATA.FOLD.FOLD_PATH = ''
 # Train Data preprocessing
 _C.TRAIN.DATA.PREPROCESS = CN()
 _C.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
@@ -67,6 +76,7 @@ _C.TRAIN.DATA.PREPROCESS.DO_CHUNK = True
 _C.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH = 180
 _C.TRAIN.DATA.PREPROCESS.CROP_FACE = CN()
 _C.TRAIN.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
+_C.TRAIN.DATA.PREPROCESS.CROP_FACE.BACKEND = 'HC'
 _C.TRAIN.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX = True
 _C.TRAIN.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF = 1.5
 _C.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION = CN()
@@ -76,6 +86,14 @@ _C.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
 _C.TRAIN.DATA.PREPROCESS.RESIZE = CN()
 _C.TRAIN.DATA.PREPROCESS.RESIZE.W = 128
 _C.TRAIN.DATA.PREPROCESS.RESIZE.H = 128
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL = CN()
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.BIG_DATA_TYPE = ['']
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.SMALL_DATA_TYPE = ['']
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.RESIZE = CN()
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_W = 144
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_H = 144
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_W = 9
+_C.TRAIN.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_H = 9
 _C.TRAIN.DATA.LOO = False
 
 # -----------------------------------------------------------------------------
@@ -94,6 +112,11 @@ _C.VALID.DATA.INFO.GENDER = ['']
 _C.VALID.DATA.INFO.GLASSER = [True]
 _C.VALID.DATA.INFO.HAIR_COVER = [True]
 _C.VALID.DATA.INFO.MAKEUP = [True]
+_C.VALID.DATA.FILTERING = CN()
+_C.VALID.DATA.FILTERING.USE_EXCLUSION_LIST = False
+_C.VALID.DATA.FILTERING.EXCLUSION_LIST = ['']
+_C.VALID.DATA.FILTERING.SELECT_TASKS = False
+_C.VALID.DATA.FILTERING.TASK_LIST = ['']
 _C.VALID.DATA.FS = 0
 _C.VALID.DATA.DATA_PATH = ''
 _C.VALID.DATA.SPLIT_PATH = None #used for cohface dataset
@@ -105,6 +128,10 @@ _C.VALID.DATA.DO_PREPROCESS = False
 _C.VALID.DATA.DATA_FORMAT = 'NDCHW'
 _C.VALID.DATA.BEGIN = 0.0
 _C.VALID.DATA.END = 1.0
+_C.VALID.DATA.FOLD = CN()
+_C.VALID.DATA.FOLD.FOLD_NAME = ''
+_C.VALID.DATA.FOLD.FOLD_PATH = ''
+
 _C.VALID.DATA.LOO= False
 # Valid Data preprocessing
 _C.VALID.DATA.PREPROCESS = CN()
@@ -116,6 +143,7 @@ _C.VALID.DATA.PREPROCESS.DO_CHUNK = False
 _C.VALID.DATA.PREPROCESS.CHUNK_LENGTH = 180
 _C.VALID.DATA.PREPROCESS.CROP_FACE = CN()
 _C.VALID.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
+_C.VALID.DATA.PREPROCESS.CROP_FACE.BACKEND = 'HC'
 _C.VALID.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX = True
 _C.VALID.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF = 1.5
 _C.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION = CN()
@@ -125,11 +153,20 @@ _C.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
 _C.VALID.DATA.PREPROCESS.RESIZE = CN()
 _C.VALID.DATA.PREPROCESS.RESIZE.W = 128
 _C.VALID.DATA.PREPROCESS.RESIZE.H = 128
+_C.VALID.DATA.PREPROCESS.BIGSMALL = CN()
+_C.VALID.DATA.PREPROCESS.BIGSMALL.BIG_DATA_TYPE = ['']
+_C.VALID.DATA.PREPROCESS.BIGSMALL.SMALL_DATA_TYPE = ['']
+_C.VALID.DATA.PREPROCESS.BIGSMALL.RESIZE = CN()
+_C.VALID.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_W = 144
+_C.VALID.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_H = 144
+_C.VALID.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_W = 9
+_C.VALID.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_H = 9
 
 # -----------------------------------------------------------------------------
 # Test settings
 # -----------------------------------------------------------------------------\
 _C.TEST = CN()
+_C.TEST.OUTPUT_SAVE_DIR = ''
 _C.TEST.METRICS = []
 _C.TEST.USE_LAST_EPOCH = True
 _C.TEST.OUT_SAVE_DIR = "outputs"
@@ -145,6 +182,11 @@ _C.TEST.DATA.INFO.GENDER = ['']
 _C.TEST.DATA.INFO.GLASSER = [True]
 _C.TEST.DATA.INFO.HAIR_COVER = [True]
 _C.TEST.DATA.INFO.MAKEUP = [True]
+_C.TEST.DATA.FILTERING = CN()
+_C.TEST.DATA.FILTERING.USE_EXCLUSION_LIST = False
+_C.TEST.DATA.FILTERING.EXCLUSION_LIST = ['']
+_C.TEST.DATA.FILTERING.SELECT_TASKS = False
+_C.TEST.DATA.FILTERING.TASK_LIST = ['']
 _C.TEST.DATA.FS = 0
 _C.TEST.DATA.DATA_PATH = ''
 _C.TEST.DATA.SPLIT_PATH = None #used for cohface dataset
@@ -156,10 +198,13 @@ _C.TEST.DATA.DO_PREPROCESS = False
 _C.TEST.DATA.DATA_FORMAT = 'NDCHW'
 _C.TEST.DATA.BEGIN = 0.0
 _C.TEST.DATA.END = 1.0
+_C.TEST.DATA.FOLD = CN()
+_C.TEST.DATA.FOLD.FOLD_NAME = ''
+_C.TEST.DATA.FOLD.FOLD_PATH = ''
 _C.TEST.DATA.LOO = False
 # Test Data preprocessing
 _C.TEST.DATA.PREPROCESS = CN()
-_C.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
+_C.TEST.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
 _C.TEST.DATA.PREPROCESS.DATA_TYPE = ['']
 _C.TEST.DATA.PREPROCESS.DATA_AUG = ['None']
 _C.TEST.DATA.PREPROCESS.LABEL_TYPE = ''
@@ -167,6 +212,7 @@ _C.TEST.DATA.PREPROCESS.DO_CHUNK = True
 _C.TEST.DATA.PREPROCESS.CHUNK_LENGTH = 180
 _C.TEST.DATA.PREPROCESS.CROP_FACE = CN()
 _C.TEST.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
+_C.TEST.DATA.PREPROCESS.CROP_FACE.BACKEND = 'HC'
 _C.TEST.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX = True
 _C.TEST.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF = 1.5
 _C.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION = CN()
@@ -176,12 +222,21 @@ _C.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX = False
 _C.TEST.DATA.PREPROCESS.RESIZE = CN()
 _C.TEST.DATA.PREPROCESS.RESIZE.W = 128
 _C.TEST.DATA.PREPROCESS.RESIZE.H = 128
+_C.TEST.DATA.PREPROCESS.BIGSMALL = CN()
+_C.TEST.DATA.PREPROCESS.BIGSMALL.BIG_DATA_TYPE = ['']
+_C.TEST.DATA.PREPROCESS.BIGSMALL.SMALL_DATA_TYPE = ['']
+_C.TEST.DATA.PREPROCESS.BIGSMALL.RESIZE = CN()
+_C.TEST.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_W = 144
+_C.TEST.DATA.PREPROCESS.BIGSMALL.RESIZE.BIG_H = 144
+_C.TEST.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_W = 9
+_C.TEST.DATA.PREPROCESS.BIGSMALL.RESIZE.SMALL_H = 9
 
 # -----------------------------------------------------------------------------
 # Unsupervised method settings
 # -----------------------------------------------------------------------------\
 _C.UNSUPERVISED = CN()
 _C.UNSUPERVISED.METHOD = []
+_C.UNSUPERVISED.OUTPUT_SAVE_DIR = ''
 _C.UNSUPERVISED.METRICS = []
 _C.UNSUPERVISED.OUT_SAVE_DIR = None
 # Unsupervised.Data settings
@@ -196,6 +251,11 @@ _C.UNSUPERVISED.DATA.INFO.GENDER = ['']
 _C.UNSUPERVISED.DATA.INFO.GLASSER = [True]
 _C.UNSUPERVISED.DATA.INFO.HAIR_COVER = [True]
 _C.UNSUPERVISED.DATA.INFO.MAKEUP = [True]
+_C.UNSUPERVISED.DATA.FILTERING = CN()
+_C.UNSUPERVISED.DATA.FILTERING.USE_EXCLUSION_LIST = False
+_C.UNSUPERVISED.DATA.FILTERING.EXCLUSION_LIST = ['']
+_C.UNSUPERVISED.DATA.FILTERING.SELECT_TASKS = False
+_C.UNSUPERVISED.DATA.FILTERING.TASK_LIST = ['']
 _C.UNSUPERVISED.DATA.FS = 0
 _C.UNSUPERVISED.DATA.DATA_PATH = ''
 _C.UNSUPERVISED.DATA.SPLIT_PATH = None #used for cohface dataset
@@ -207,8 +267,12 @@ _C.UNSUPERVISED.DATA.DO_PREPROCESS = False
 _C.UNSUPERVISED.DATA.DATA_FORMAT = 'NDCHW'
 _C.UNSUPERVISED.DATA.BEGIN = 0.0
 _C.UNSUPERVISED.DATA.END = 1.0
+_C.UNSUPERVISED.DATA.FOLD = CN()
+_C.UNSUPERVISED.DATA.FOLD.FOLD_NAME = ''
+_C.UNSUPERVISED.DATA.FOLD.FOLD_PATH = ''
 # Unsupervised Data preprocessing
 _C.UNSUPERVISED.DATA.PREPROCESS = CN()
+_C.UNSUPERVISED.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL = False
 _C.UNSUPERVISED.DATA.PREPROCESS.DATA_TYPE = ['']
 _C.UNSUPERVISED.DATA.PREPROCESS.DATA_AUG = ['None']
 _C.UNSUPERVISED.DATA.PREPROCESS.LABEL_TYPE = ''
@@ -216,6 +280,7 @@ _C.UNSUPERVISED.DATA.PREPROCESS.DO_CHUNK = True
 _C.UNSUPERVISED.DATA.PREPROCESS.CHUNK_LENGTH = 180
 _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE = CN()
 _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE = True
+_C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.BACKEND = 'HC'
 _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX = True
 _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF = 1.5
 _C.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.DETECTION = CN()
@@ -298,6 +363,12 @@ _C.MODEL.PHYSNET = CN()
 _C.MODEL.PHYSNET.FRAME_NUM = 64
 
 # -----------------------------------------------------------------------------
+# Specific parameters for iBVPNet parameters
+# -----------------------------------------------------------------------------
+_C.MODEL.iBVPNet = CN()
+_C.MODEL.iBVPNet.FRAME_NUM = 64
+
+# -----------------------------------------------------------------------------
 # Model Settings for TS-CAN
 # -----------------------------------------------------------------------------
 _C.MODEL.TSCAN = CN()
@@ -309,12 +380,17 @@ _C.MODEL.TSCAN.FRAME_DEPTH = 10
 _C.MODEL.EFFICIENTPHYS = CN()
 _C.MODEL.EFFICIENTPHYS.FRAME_DEPTH = 10
 
-
 # -----------------------------------------------------------------------------
 # Model Settings for rPPGNet
 # -----------------------------------------------------------------------------
 _C.MODEL.rPPGNet = CN()
 _C.MODEL.rPPGNet.FRAME_DEPTH = 64
+
+# -----------------------------------------------------------------------------
+# Model Settings for BigSmall
+# -----------------------------------------------------------------------------
+_C.MODEL.BIGSMALL = CN()
+_C.MODEL.BIGSMALL.FRAME_DEPTH = 3
 
 # -----------------------------------------------------------------------------
 # Model Settings for PhysFormer
@@ -402,6 +478,7 @@ def update_config(config, args):
                                       "DataAug{0}".format("_".join(config.TRAIN.DATA.PREPROCESS.DATA_AUG)),
                                       "LabelType{0}".format(config.TRAIN.DATA.PREPROCESS.LABEL_TYPE),
                                       "Crop_face{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE),
+                                      "Backend{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.BACKEND),
                                       "Large_box{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX),
                                       "Large_size{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                       "Dyamic_Det{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
@@ -412,10 +489,12 @@ def update_config(config, args):
 
     name, ext = os.path.splitext(config.TRAIN.DATA.FILE_LIST_PATH)
     if not ext: # no file extension
+        FOLD_STR = '_' + config.TRAIN.DATA.FOLD.FOLD_NAME if config.TRAIN.DATA.FOLD.FOLD_NAME else ''
         config.TRAIN.DATA.FILE_LIST_PATH = os.path.join(config.TRAIN.DATA.FILE_LIST_PATH, \
                                                         config.TRAIN.DATA.EXP_DATA_NAME + '_' + \
                                                         str(config.TRAIN.DATA.BEGIN) + '_' + \
-                                                        str(config.TRAIN.DATA.END) + '.csv')
+                                                        str(config.TRAIN.DATA.END) + \
+                                                        FOLD_STR + '.csv')
     elif ext != '.csv':
         raise ValueError('TRAIN dataset FILE_LIST_PATH must either be a directory path or a .csv file name')
     
@@ -435,6 +514,7 @@ def update_config(config, args):
                                         "DataAug{0}".format("_".join(config.VALID.DATA.PREPROCESS.DATA_AUG)),
                                         "LabelType{0}".format(config.VALID.DATA.PREPROCESS.LABEL_TYPE),
                                         "Crop_face{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE),
+                                        "Backend{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.BACKEND),
                                         "Large_box{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX),
                                         "Large_size{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                         "Dyamic_Det{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
@@ -445,10 +525,12 @@ def update_config(config, args):
 
         name, ext = os.path.splitext(config.VALID.DATA.FILE_LIST_PATH)
         if not ext:  # no file extension
+            FOLD_STR = '_' + config.VALID.DATA.FOLD.FOLD_NAME if config.VALID.DATA.FOLD.FOLD_NAME else ''
             config.VALID.DATA.FILE_LIST_PATH = os.path.join(config.VALID.DATA.FILE_LIST_PATH, \
                                                             config.VALID.DATA.EXP_DATA_NAME + '_' + \
                                                             str(config.VALID.DATA.BEGIN) + '_' + \
-                                                            str(config.VALID.DATA.END) + '.csv')
+                                                            str(config.VALID.DATA.END) + \
+                                                            FOLD_STR + '.csv')
         elif ext != '.csv':
             raise ValueError('VALIDATION dataset FILE_LIST_PATH must either be a directory path or a .csv file name')
 
@@ -469,6 +551,7 @@ def update_config(config, args):
                                       "DataAug{0}".format("_".join(config.TEST.DATA.PREPROCESS.DATA_AUG)),
                                       "LabelType{0}".format(config.TEST.DATA.PREPROCESS.LABEL_TYPE),
                                       "Crop_face{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE),
+                                      "Backend{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.BACKEND),
                                       "Large_box{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX),
                                       "Large_size{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                       "Dyamic_Det{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
@@ -479,10 +562,12 @@ def update_config(config, args):
 
     name, ext = os.path.splitext(config.TEST.DATA.FILE_LIST_PATH)
     if not ext: # no file extension
+        FOLD_STR = '_' + config.TEST.DATA.FOLD.FOLD_NAME if config.TEST.DATA.FOLD.FOLD_NAME else ''
         config.TEST.DATA.FILE_LIST_PATH = os.path.join(config.TEST.DATA.FILE_LIST_PATH, \
                                                        config.TEST.DATA.EXP_DATA_NAME + '_' + \
                                                        str(config.TEST.DATA.BEGIN) + '_' + \
-                                                       str(config.TEST.DATA.END) + '.csv')
+                                                       str(config.TEST.DATA.END) + \
+                                                       FOLD_STR + '.csv')
     elif ext != '.csv':
         raise ValueError('TEST dataset FILE_LIST_PATH must either be a directory path or a .csv file name')
 
@@ -508,7 +593,7 @@ def update_config(config, args):
                 model_file_name_parts = config.TRAIN.MODEL_FILE_NAME.split('_')
                 model_file_name_parts[train_name_idx] = 'MA-' + model_file_name_parts[train_name_idx]
                 config.TRAIN.MODEL_FILE_NAME = '_'.join(model_file_name_parts)
-            if 'Motion' in config.VALID.DATA.PREPROCESS.DATA_AUG and valid_name_part is not None:
+            if 'Motion' in config.VALID.DATA.PREPROCESS.DATA_AUG:
                 model_file_name_parts = config.TRAIN.MODEL_FILE_NAME.split('_')
                 model_file_name_parts[valid_name_idx] = 'MA-' + model_file_name_parts[valid_name_idx]
                 config.TRAIN.MODEL_FILE_NAME = '_'.join(model_file_name_parts)
@@ -519,6 +604,10 @@ def update_config(config, args):
         else:
             raise ValueError(f'MODEL_FILE_NAME does not follow expected naming pattern of [TRAIN_SET]_[VALID_SET]_[TEST_SET]! \
                              \nReceived {config.TRAIN.MODEL_FILE_NAME}.')
+
+    # ENSURE USE_PSEUDO_LABELS IS NOT TRUE FOR UNSUPERVISED METHODS
+    if config.TOOLBOX_MODE == 'unsupervised_method' and config.UNSUPERVISED.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL == True:
+        raise ValueError('Pseudo PPG labels are NOT supported for unsupervised methods.')
 
     # UPDATE UNSUPERVISED PATHS
     if config.UNSUPERVISED.DATA.FILE_LIST_PATH == default_UNSUPERVISED_FILE_LIST_PATH:
@@ -531,6 +620,7 @@ def update_config(config, args):
                                       "DataAug{0}".format("_".join(config.UNSUPERVISED.DATA.PREPROCESS.DATA_AUG)),
                                       "LabelType{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.LABEL_TYPE),
                                       "Crop_face{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.DO_CROP_FACE),
+                                      "Backend{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.BACKEND),
                                       "Large_box{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.USE_LARGE_FACE_BOX),
                                       "Large_size{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                       "Dyamic_Det{0}".format(config.UNSUPERVISED.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
@@ -542,10 +632,12 @@ def update_config(config, args):
 
     name, ext = os.path.splitext(config.UNSUPERVISED.DATA.FILE_LIST_PATH)
     if not ext: # no file extension
+        FOLD_STR = '_' + config.UNSUPERVISED.DATA.FOLD.FOLD_NAME if config.UNSUPERVISED.DATA.FOLD.FOLD_NAME else ''
         config.UNSUPERVISED.DATA.FILE_LIST_PATH = os.path.join(config.UNSUPERVISED.DATA.FILE_LIST_PATH, \
-                                                         config.UNSUPERVISED.DATA.EXP_DATA_NAME + '_' + \
-                                                         str(config.UNSUPERVISED.DATA.BEGIN) + '_' + \
-                                                         str(config.UNSUPERVISED.DATA.END) + '.csv')
+                                                        config.UNSUPERVISED.DATA.EXP_DATA_NAME + '_' + \
+                                                        str(config.UNSUPERVISED.DATA.BEGIN) + '_' + \
+                                                        str(config.UNSUPERVISED.DATA.END) + \
+                                                        FOLD_STR + '.csv')
     elif ext != '.csv':
         raise ValueError('UNSUPERVISED dataset FILE_LIST_PATH must either be a directory path or a .csv file name')
 
@@ -595,8 +687,6 @@ def update_config(config, args):
     config.MODEL.MODEL_DIR = os.path.join(config.MODEL.MODEL_DIR, config.TRAIN.DATA.EXP_DATA_NAME)
     config.freeze()
     return
-
-
 
 def get_config(args):
     # Return a clone so that the defaults will not be altered

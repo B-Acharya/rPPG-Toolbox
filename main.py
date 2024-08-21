@@ -87,25 +87,25 @@ def create_path_list(listdf, train, test, i, j=0, outer=True):
 def add_args(parser):
     """Adds arguments for parser."""
     parser.add_argument('--config_file', required=False,
-                        default="configs/train_configs/PURE_PURE_UBFC_TSCAN_BASIC.yaml", type=str, help="The name of the model.")
-    '''Neural Method Sample YAMSL LIST:
-      SCAMPS_SCAMPS_UBFC_TSCAN_BASIC.yaml
-      SCAMPS_SCAMPS_UBFC_DEEPPHYS_BASIC.yaml
-      SCAMPS_SCAMPS_UBFC_PHYSNET_BASIC.yaml
+                        default="configs/train_configs/PURE_PURE_UBFC-rPPG_TSCAN_BASIC.yaml", type=str, help="The name of the model.")
+    '''Neural Method Sample YAML LIST:
+      SCAMPS_SCAMPS_UBFC-rPPG_TSCAN_BASIC.yaml
+      SCAMPS_SCAMPS_UBFC-rPPG_DEEPPHYS_BASIC.yaml
+      SCAMPS_SCAMPS_UBFC-rPPG_PHYSNET_BASIC.yaml
       SCAMPS_SCAMPS_PURE_DEEPPHYS_BASIC.yaml
       SCAMPS_SCAMPS_PURE_TSCAN_BASIC.yaml
       SCAMPS_SCAMPS_PURE_PHYSNET_BASIC.yaml
-      PURE_PURE_UBFC_TSCAN_BASIC.yaml
-      PURE_PURE_UBFC_DEEPPHYS_BASIC.yaml
-      PURE_PURE_UBFC_PHYSNET_BASIC.yaml
+      PURE_PURE_UBFC-rPPG_TSCAN_BASIC.yaml
+      PURE_PURE_UBFC-rPPG_DEEPPHYS_BASIC.yaml
+      PURE_PURE_UBFC-rPPG_PHYSNET_BASIC.yaml
       PURE_PURE_MMPD_TSCAN_BASIC.yaml
-      UBFC_UBFC_PURE_TSCAN_BASIC.yaml
-      UBFC_UBFC_PURE_DEEPPHYS_BASIC.yaml
-      UBFC_UBFC_PURE_PHYSNET_BASIC.yaml
-      MMPD_MMPD_UBFC_TSCAN_BASIC.yaml
-    Unsupervised Method Sample YAMSL LIST:
+      UBFC-rPPG_UBFC-rPPG_PURE_TSCAN_BASIC.yaml
+      UBFC-rPPG_UBFC-rPPG_PURE_DEEPPHYS_BASIC.yaml
+      UBFC-rPPG_UBFC-rPPG_PURE_PHYSNET_BASIC.yaml
+      MMPD_MMPD_UBFC-rPPG_TSCAN_BASIC.yaml
+    Unsupervised Method Sample YAML LIST:
       PURE_UNSUPERVISED.yaml
-      UBFC_UNSUPERVISED.yaml
+      UBFC-rPPG_UNSUPERVISED.yaml
     '''
     return parser
 
@@ -115,12 +115,16 @@ def LOO(comet_logger, config, data_loader_dict, outer):
 
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == "iBVPNet":
+        model_trainer = trainer.iBVPNetTrainer.iBVPNetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "Tscan":
         model_trainer = trainer.TscanTrainer.TscanTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "EfficientPhys":
         model_trainer = trainer.EfficientPhysTrainer.EfficientPhysTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'DeepPhys':
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'BigSmall':
+        model_trainer = trainer.BigSmallTrainer.BigSmallTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'rPPGNet':
         model_trainer = trainer.rPPGNetTrainer.rPPGNetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysFormer':
@@ -321,6 +325,8 @@ def test(config, data_loader_dict):
     """tests the model."""
     if config.MODEL.NAME == "Physnet":
         model_trainer = trainer.PhysnetTrainer.PhysnetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == "iBVPNet":
+        model_trainer = trainer.iBVPNetTrainer.iBVPNetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "Tscan":
         model_trainer = trainer.TscanTrainer.TscanTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "EfficientPhys":
@@ -329,6 +335,8 @@ def test(config, data_loader_dict):
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'rPPGNet':
         model_trainer = trainer.rPPGNetTrainer.rPPGNetTrainer(config, data_loader_dict)
+    elif config.MODEL.NAME == 'BigSmall':
+        model_trainer = trainer.BigSmallTrainer.BigSmallTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'PhysFormer':
         model_trainer = trainer.PhysFormerTrainer.PhysFormerTrainer(config, data_loader_dict)
     else:
@@ -476,6 +484,12 @@ if __name__ == "__main__":
             valid_loader = data_loader.VIPLLoader.VIPLLoader
         elif config.VALID.DATA.DATASET == "COHFACE":
             valid_loader = data_loader.COHFACELoader.COHFACELoader
+        elif config.VALID.DATA.DATASET == "BP4DPlusBigSmall":
+            valid_loader = data_loader.BP4DPlusBigSmallLoader.BP4DPlusBigSmallLoader
+        elif config.VALID.DATA.DATASET == "UBFC-PHYS":
+            valid_loader = data_loader.UBFCPHYSLoader.UBFCPHYSLoader
+        elif config.VALID.DATA.DATASET == "iBVP":
+            valid_loader = data_loader.iBVPLoader.iBVPLoader
         elif config.VALID.DATA.DATASET is None and not config.TEST.USE_LAST_EPOCH:
             raise ValueError("Validation dataset not specified despite USE_LAST_EPOCH set to False!")
         elif config.TEST.USE_LAST_EPOCH:
@@ -623,8 +637,15 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.VIPLLoader.VIPLLoader
         elif config.UNSUPERVISED.DATA.DATASET == "DST":
             unsupervised_loader = data_loader.DSTLoader.DSTLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "BP4DPlus":
+            unsupervised_loader = data_loader.BP4DPlusLoader.BP4DPlusLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "UBFC-PHYS":
+            unsupervised_loader = data_loader.UBFCPHYSLoader.UBFCPHYSLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "iBVP":
+            unsupervised_loader = data_loader.iBVPLoader.iBVPLoader
         else:
-            raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
+            raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
+                             SCAMPS, BP4D+, UBFC-PHYS and iBVP.")
 
         unsupervised_data = unsupervised_loader(
             name="unsupervised",

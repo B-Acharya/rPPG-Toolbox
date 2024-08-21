@@ -33,8 +33,8 @@ class Neg_Pearson(nn.Module):
             sum_x2 = torch.sum(torch.pow(preds[i],2))  
             sum_y2 = torch.sum(torch.pow(labels[i],2)) 
             N = preds.shape[1]
+            #TODO: the original code does not handel divide by zero, why ?
             pearson = (N*sum_xy - sum_x*sum_y)/(torch.sqrt((N*sum_x2 - torch.pow(sum_x,2)+1e-5)*(N*sum_y2 - torch.pow(sum_y,2))+1e5))
-            # pearson = torch.clamp(pearson, min=-1, max=1)
             loss += 1 - pearson
 
             

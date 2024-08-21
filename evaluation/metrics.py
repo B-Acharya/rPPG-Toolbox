@@ -179,13 +179,18 @@ def read_hr_label(feed_dict, index):
     return index, hr
 
 
-def _reform_data_from_dict(data):
+def _reform_data_from_dict(data, flatten=True):
     """Helper func for calculate metrics: reformat predictions and labels from dicts. """
     sort_data = sorted(data.items(), key=lambda x: x[0])
     sort_data = [i[1] for i in sort_data]
     sort_data = torch.cat(sort_data, dim=0)
-    return np.reshape(sort_data.cpu(), (-1))
 
+    if flatten:
+        sort_data = np.reshape(sort_data.cpu(), (-1))
+    else:
+        sort_data = np.array(sort_data.cpu())
+
+    return sort_data
 
 def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_outputs=True):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
