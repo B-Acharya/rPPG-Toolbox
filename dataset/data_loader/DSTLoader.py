@@ -82,6 +82,17 @@ class DSTLoader(BaseLoader):
         """
         super().__init__(name, data_path, config_data, model)
 
+    def get_participant_list(self):
+        import csv
+        participant_list = []
+        csvPath = "/data/dst_tsst_22_bi_multi_nt_lab/processed/participants_ML4H.csv"
+        with open(csvPath, newline='') as csvfile:
+            participant_data = csv.DictReader(csvfile, delimiter=',', quotechar='|')
+            for row in participant_data:
+                participant_list.append(row['token'])
+
+        return participant_list
+
     def get_raw_data(self, data_path):
         """Returns data directories under the path (for DST dataset)."""
         print("Files loading from json in: ", data_path, "...")
@@ -89,13 +100,20 @@ class DSTLoader(BaseLoader):
             sensor_files = json.load(f)
         print("Files loaded from json.")
         filtered_tuple = {key: value for key, value in sensor_files.items() if 'dst' in key}
-        print(len(filtered_tuple), "DSTs with each speech and math in Json-File")
+        print(len(filtered_tuple), "DSTs with speech and math in Json-File")
         dirs = list()
+
+        valid_participants = self.get_participant_list()
         for token, (timer1_marker, csv_marker_0, csv_marker_1, back_from_study,
                     sensor_txt, sampling_rate, dst_files,
                     speech_task_start_time_sensor, speech_task_end_time_sensor, math_task_start_time_sensor,
                     math_task_end_time_sensor, bpm_rmssd_dict) in tqdm(filtered_tuple.items()):
             subject = str(token[-8:])
+
+            if subject not in valid_participants:
+                print(f"{subject} is skipped")
+                continue
+
             for dst_key in ["dst_speech_video", "dst_math_video"]:
                 data_dir = dst_files[dst_key][0]
                 task = subject + "_" + dst_key[4:-6]
