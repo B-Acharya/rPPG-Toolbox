@@ -86,6 +86,7 @@ class DSTLoader(BaseLoader):
         import csv
         participant_list = []
         csvPath = "/data/dst_tsst_22_bi_multi_nt_lab/processed/participants_ML4H.csv"
+        # csvPath = "/data/dst_tsst_22_bi_multi_nt_lab/processed/participants_OI.csv"
         with open(csvPath, newline='') as csvfile:
             participant_data = csv.DictReader(csvfile, delimiter=',', quotechar='|')
             for row in participant_data:
@@ -199,7 +200,15 @@ class DSTLoader(BaseLoader):
         hr = data_dirs[i]['hr']
         sensor_df = self.sensor_txt_to_df(sensor_txt)
         ecg_df = sensor_df[(sensor_df["time_seconds"] >= start_time) & (sensor_df["time_seconds"] <= end_time)]
+
+        if not os.path.exists(video_path_converted):
+            raise ValueError("Video  missing converted path")
+
         print("os path exists converted", os.path.exists(video_path_converted))
+
+        if not os.path.exists(video_path):
+            raise ValueError("Video path missing ")
+
         print("os path exists", os.path.exists(video_path))
         frames = self.read_video(video_path_converted)
         ecgs = self.read_wave(ecg_df)
