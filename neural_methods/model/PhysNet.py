@@ -84,12 +84,16 @@ class PhysNet_padding_Encoder_Decoder_MAX(nn.Module):
 
         self.ConvBlock10 = nn.Conv3d(64, 1, [1, 1, 1], stride=1, padding=0)
 
-        self.MaxpoolSpa_1 = nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
-        self.MaxpoolSpa_2 = nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
+        self.MaxpoolSpa = nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
+        self.MaxpoolSpaTem = nn.MaxPool3d((2, 2, 2), stride=2)
+
+        # Uncommet for Deeplift
+        # self.MaxpoolSpa_1 = nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
+        # self.MaxpoolSpa_2 = nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
 
         #seperate maxpolling for deeplift to work
-        self.MaxpoolSpaTem_1 = nn.MaxPool3d((2, 2, 2), stride=2)
-        self.MaxpoolSpaTem_2 = nn.MaxPool3d((2, 2, 2), stride=2)
+        # self.MaxpoolSpaTem_1 = nn.MaxPool3d((2, 2, 2), stride=2)
+        # self.MaxpoolSpaTem_2 = nn.MaxPool3d((2, 2, 2), stride=2)
 
         # self.poolspa = nn.AdaptiveMaxPool3d((frames,1,1))    # pool only spatial space
         self.poolspa = nn.AdaptiveAvgPool3d((frames, 1, 1))
@@ -99,20 +103,24 @@ class PhysNet_padding_Encoder_Decoder_MAX(nn.Module):
         [batch, channel, length, width, height] = x.shape
 
         x = self.ConvBlock1(x)  # x [3, T, 128,128]
-        x = self.MaxpoolSpa_1(x)  # x [16, T, 64,64]
+        # x = self.MaxpoolSpa_1(x)  # x [16, T, 64,64]
+        x = self.MaxpoolSpa(x)  # x [16, T, 64,64]
 
         x = self.ConvBlock2(x)  # x [32, T, 64,64]
         x_visual6464 = self.ConvBlock3(x)  # x [32, T, 64,64]
         # x [32, T/2, 32,32]    Temporal halve
-        x = self.MaxpoolSpaTem_1(x_visual6464)
+        # x = self.MaxpoolSpaTem_1(x_visual6464)
+        x = self.MaxpoolSpaTem(x_visual6464)
 
         x = self.ConvBlock4(x)  # x [64, T/2, 32,32]
         x_visual3232 = self.ConvBlock5(x)  # x [64, T/2, 32,32]
-        x = self.MaxpoolSpaTem_2(x_visual3232)  # x [64, T/4, 16,16]
+        # x = self.MaxpoolSpaTem_2(x_visual3232)  # x [64, T/4, 16,16]
+        x = self.MaxpoolSpaTem(x_visual3232)  # x [64, T/4, 16,16]
 
         x = self.ConvBlock6(x)  # x [64, T/4, 16,16]
         x_visual1616 = self.ConvBlock7(x)  # x [64, T/4, 16,16]
-        x = self.MaxpoolSpa_2(x_visual1616)  # x [64, T/4, 8,8]
+        # x = self.MaxpoolSpa_2(x_visual1616)  # x [64, T/4, 8,8]
+        x = self.MaxpoolSpa(x_visual1616)  # x [64, T/4, 8,8]
 
         x = self.ConvBlock8(x)  # x [64, T/4, 8, 8]
         x = self.ConvBlock9(x)  # x [64, T/4, 8, 8]

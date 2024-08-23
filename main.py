@@ -289,7 +289,7 @@ def train_and_test(comet_logger,config, data_loader_dict):
         else:
             #slurm settings
             #trainer_light = pl.Trainer(devices=1, num_nodes=1,strategy='ddp', accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback])
-            trainer_light = pl.Trainer(accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, callbacks=[checkpoint_callback, lr_monitor])
+            trainer_light = pl.Trainer(accelerator='gpu', default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger, max_epochs=config.TRAIN.EPOCHS, num_sanity_val_steps=0, callbacks=[checkpoint_callback, lr_monitor])
 
         #finding the best lr
     if config.TRAIN.USE_LR_FINDER:
@@ -313,7 +313,7 @@ def train_and_test(comet_logger,config, data_loader_dict):
         print("Using lr:", config.TRAIN.LR)
 
     if config.TEST.USE_LAST_EPOCH:
-        trainer_light.fit(model_trainer, data_loader_dict['train'])
+        trainer_light.fit(model_trainer, data_loader_dict['train'] )
         comet_logger.experiment.add_tag("last_epoch")
         trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
     else:
@@ -937,7 +937,8 @@ if __name__ == "__main__":
 
         comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
                                    # project_name="Exp3-cmbp-on-public-Start2",
-                                   project_name="pure_vipl_dst_tscan",
+                                   # project_name="pure_vipl_dst_tscan",
+                                   project_name="Physnet-loss-funciton-analysis",
                                    # project_name="Exp2-public-on-CMBP-start2",
                                    workspace="b-acharya",
                                    experiment_name=f"{config.TRAIN.DATA.DATASET}_{config.TEST.DATA.DATASET}_{config.MODEL.NAME}",
@@ -949,12 +950,19 @@ if __name__ == "__main__":
         }
 
         comet_logger.log_hyperparams(hyper_parameters)
-        comet_logger.experiment.add_tags(
-            [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
-            config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+        if config.MODEL.NAME == "Physnet":
+            comet_logger.experiment.add_tags(
+                [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+                 config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE, config.MODEL.PHYSNET.LOSS])
+        else:
+            comet_logger.experiment.add_tags(
+                [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+                config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+
         comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
 
         train_and_test(comet_logger, config, data_loader_dict)
+
     elif config.TOOLBOX_MODE == "only_test":
         test(config, data_loader_dict)
     elif config.TOOLBOX_MODE == "unsupervised_method":

@@ -361,6 +361,7 @@ _C.MODEL.MODEL_DIR = 'PreTrainedModels'
 # Specific parameters for physnet parameters
 _C.MODEL.PHYSNET = CN()
 _C.MODEL.PHYSNET.FRAME_NUM = 64
+_C.MODEL.PHYSNET.LOSS = "NEGPEASRSON"
 
 # -----------------------------------------------------------------------------
 # Specific parameters for iBVPNet parameters

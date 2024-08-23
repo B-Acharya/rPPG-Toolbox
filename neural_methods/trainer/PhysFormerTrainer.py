@@ -62,6 +62,7 @@ class PhysFormerTrainer(pl.LightningModule):
                 patches=(self.patch_size,) * 3, dim=self.dim, ff_dim=self.ff_dim, num_heads=self.num_heads,
                 num_layers=self.num_layers,
                 dropout_rate=self.dropout_rate, theta=self.theta).to(self.device)
+
             self.num_train_batches = len(data_loader["train"])
             self.criterion_reg = torch.nn.MSELoss()
             self.criterion_L1loss = torch.nn.L1Loss()
@@ -158,28 +159,6 @@ class PhysFormerTrainer(pl.LightningModule):
         """ Runs the model on test sets."""
         if batch is None:
             raise ValueError("No data for test")
-
-        # if self.config.TOOLBOX_MODE == "only_test":
-        # if self.config.TOOLBOX_MODE == "only_test":
-        # if self.config.TOOLBOX_MODE == "only_test":
-        #     if not os.path.exists(self.config.INFERENCE.MODEL_PATH):
-        #         raise ValueError("Inference model path error! Please check INFERENCE.MODEL_PATH in your yaml.")
-        #     self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH))
-        #     print("Testing uses pretrained model!")
-        #     print(self.config.INFERENCE.MODEL_PATH)
-        # else:
-        #     if self.config.TEST.USE_LAST_EPOCH:
-        #         last_epoch_model_path = os.path.join(
-        #             self.model_dir, self.model_file_name + '_Epoch' + str(self.max_epoch_num - 1) + '.pth')
-        #         print("Testing uses last epoch as non-pretrained model!")
-        #         print(last_epoch_model_path)
-        #         self.model.load_state_dict(torch.load(last_epoch_model_path))
-        #     else:
-        #         best_model_path = os.path.join(
-        #             self.model_dir, self.model_file_name + '_Epoch' + str(self.best_epoch) + '.pth')
-        #         print("Testing uses best epoch selected using model selection as non-pretrained model!")
-        #         print(best_model_path)
-        #         self.model.load_state_dict(torch.load(best_model_path))
 
         batch_size = batch[0].shape[0]
         data, label = batch[0].float().to(self.device), batch[1].float().to(self.device)
