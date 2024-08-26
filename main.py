@@ -663,7 +663,7 @@ if __name__ == "__main__":
 
     elif config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH":
         # Number of folds for k fold validation
-        K_fold = 5
+        K_fold = 10
 
         #dataloader for the training set
         if config.TRAIN.DATA.DATASET == "PURE":
@@ -736,7 +736,7 @@ if __name__ == "__main__":
         participants = sorted(list(set(list_file['id'])))
 
 
-        for i, (train_index, test_index) in enumerate(kf.split(participants)):
+        for test_i, (train_index, test_index) in enumerate(kf.split(participants)):
 
             # Uncommet this if you want to re-run a particular fold
             # if i != int(config.FOLD):
@@ -746,58 +746,58 @@ if __name__ == "__main__":
             # splits for dataloaders for Kfold cross validation
             train_participants = np.array([participants[i] for i in train_index])
             test_participants = np.array([participants[i] for i in test_index])
-            train_path, test_path = create_path_list(list_file, train_participants, test_participants, i)
+            train_path, test_path = create_path_list(list_file, train_participants, test_participants, test_i)
 
 
             # TODO: Old code for nested cross validation is this still needed ?
-            # for j, (train_index_inner, valid_index_inner) in enumerate(kf_inner.split(train_participants)):
-            #
-            #     if config.TOOLBOX_MODE == "LOO_test":
-            #         if j != config.INNER_FOLD:
-            #             continue
+            for valid_j, (train_index_inner, valid_index_inner) in enumerate(kf_inner.split(train_participants)):
+
+                if config.TOOLBOX_MODE == "LOO_test":
+                    if j != config.INNER_FOLD:
+                        continue
 
             #split the training set into train and validation sets
-            # train_participants_inner, valid_participants_inner = train_test_split(train_participants)
+                train_participants_inner, valid_participants_inner = train_test_split(train_participants)
 
             #
-            # train_participants_inner = [train_participants[i] for i in train_index_inner]
-            # valid_participants_inner = [train_participants[i] for i in valid_index_inner]
-            # train_path, valid_path = create_path_list(list_file, train_participants_inner, valid_participants_inner, i, outer=False)
+                train_participants_inner = [train_participants[i] for i in train_index_inner]
+                valid_participants_inner = [train_participants[i] for i in valid_index_inner]
+                train_path, valid_path = create_path_list(list_file, train_participants_inner, valid_participants_inner, test_i, valid_j, outer=False)
 
-            train_df = pd.read_csv(train_path)
-            # valid_df = pd.read_csv(valid_path)
-            test_df = pd.read_csv(test_path)
+                train_df = pd.read_csv(train_path)
+                valid_df = pd.read_csv(valid_path)
+                test_df = pd.read_csv(test_path)
 
-            print("-"*100)
-            print(train_participants)
-            print("-"*100)
-            # print( valid_participants_inner )
-            print("-"*100)
-            print(test_participants)
+                print("-"*100)
+                print(train_participants_inner)
+                print("-"*100)
+                print( valid_participants_inner)
+                print("-"*100)
+                print(test_participants)
 
-            config.defrost()
-            config.TRAIN.DATA.FILE_LIST_PATH = str(train_path)
-            # config.VALID.DATA.FILE_LIST_PATH = str(valid_path)
-            config.TEST.DATA.FILE_LIST_PATH = str(test_path)
-            print(config.TEST.DATA.FILE_LIST_PATH)
-            print(config.TRAIN.DATA.FILE_LIST_PATH)
-            print(config.VALID.DATA.FILE_LIST_PATH)
-            config.TRAIN.DATA.DO_PREPROCESS = False
-            config.VALID.DATA.DO_PREPROCESS = False
-            config.TEST.DATA.DO_PREPROCESS = False
-            config.freeze()
+                config.defrost()
+                config.TRAIN.DATA.FILE_LIST_PATH = str(train_path)
+                config.VALID.DATA.FILE_LIST_PATH = str(valid_path)
+                config.TEST.DATA.FILE_LIST_PATH = str(test_path)
+                print(config.TEST.DATA.FILE_LIST_PATH)
+                print(config.TRAIN.DATA.FILE_LIST_PATH)
+                print(config.VALID.DATA.FILE_LIST_PATH)
+                config.TRAIN.DATA.DO_PREPROCESS = False
+                config.VALID.DATA.DO_PREPROCESS = False
+                config.TEST.DATA.DO_PREPROCESS = False
+                config.freeze()
 
-            comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                           project_name="exp1-VIPL",
+                comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                           project_name="Physnet-loss-functions",
                                            workspace="b-acharya",
                                            #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-                                           experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{i}",
+                                           experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{test_i}_valid_{valid_j}",
                                            log_code=True
                                            )
-            hyper_parameters = {
-                    "Learning_rate": config.TRAIN.LR,
-                    "epochs": config.TRAIN.EPOCHS
-            }
+                hyper_parameters = {
+                        "Learning_rate": config.TRAIN.LR,
+                        "epochs": config.TRAIN.EPOCHS
+                }
 
             # elif config.TOOLBOX_MODE == "LOO_test":
             #
@@ -815,118 +815,130 @@ if __name__ == "__main__":
             # else:
             #     raise NotImplementedError
 
-            comet_logger.log_hyperparams(hyper_parameters)
-            comet_logger.experiment.add_tags(
-                    [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
-                     config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
-            comet_logger.experiment.add_tag(f"Outer_loop:{i}")
-            comet_logger.experiment.log_asset(train_path)
-            comet_logger.experiment.log_asset(test_path)
-            # comet_logger.experiment.log_asset(valid_path)
-            comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+                comet_logger.log_hyperparams(hyper_parameters)
+                comet_logger.experiment.add_tags(
+                        [config.MODEL.NAME, config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH, config.TRAIN.DATA.DATASET,
+                         config.TRAIN.DATA.PREPROCESS.LABEL_TYPE, config.TRAIN.BATCH_SIZE])
+                comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
+                comet_logger.experiment.add_tag(f"Outer_loop:{test_i}")
+                comet_logger.experiment.add_tag(f"Inner_loop:{valid_j}")
+                comet_logger.experiment.add_tag(config.MODEL.PHYSNET.LOSS)
+                comet_logger.experiment.log_asset(train_path)
+                comet_logger.experiment.log_asset(test_path)
+                comet_logger.experiment.log_asset(valid_path)
+                comet_logger.experiment.log_asset(CONFIG_FILE_NAME)
 
-                #ALL run on the same dataset and dont need a asepearte loader
-            train_data = loader(
-                    name="train",
-                    data_path=config.TRAIN.DATA.DATA_PATH,
-                    config_data=config.TRAIN.DATA,
-                    model = config.MODEL.NAME
-                )
-
-            if config.TOOLBOX_MODE == "ENRICH":
-                enriched_train_set = torch.utils.data.ConcatDataset([train_data, valid_data_loader])
-               # valid_data = loader(
-               #     name="valid",
-               #     data_path=config.VALID.DATA.DATA_PATH,
-               #     config_data=config.VALID.DATA,
-               #     model = config.MODEL.NAME
-               # )
-                if config.MODEL.NAME == 'DeepPhys' or config.MODEL.NAME == "Tscan":
-
-                    a_len = len(train_data)
-                    ab_len = a_len + len(valid_data_loader)
-
-                    a_indices = list(range(a_len))
-                    b_indices = list(range(a_len, ab_len))
-
-
-                    class MyBatchSampler(torch.utils.data.Sampler):
-                        def __init__(self, a_indices, b_indices, batch_size):
-                            self.a_indices = a_indices
-                            self.b_indices = b_indices
-                            self.batch_size = batch_size
-                        def __iter__(self):
-                            random.shuffle(self.a_indices)
-                            random.shuffle(self.b_indices)
-                            a_batches = self.chunk(self.a_indices, self.batch_size)
-                            b_batches = self.chunk(self.b_indices, self.batch_size)
-                            all_batches = list(a_batches + b_batches)
-                            all_batches = [batch.tolist() for batch in all_batches]
-                            random.shuffle(all_batches)
-                            return iter(all_batches)
-                        def __len__(self):
-                            return (len(self.a_indices) + len(self.b_indices)) // self.batch_size
-                        @staticmethod
-                        def chunk(indices, size):
-                            return torch.split(torch.tensor(indices), size)
-
-                    batch_sampler = MyBatchSampler(a_indices, b_indices, config.TRAIN.BATCH_SIZE)
-
-                    dl = DataLoader(enriched_train_set, batch_sampler=batch_sampler)
-
-                    data_loader_dict['train'] = DataLoader(
-                    dataset= enriched_train_set,
-                    num_workers=16,
-                    # batch_size=config.TRAIN.BATCH_SIZE,
-                    # shuffle=True,
-                    batch_sampler=batch_sampler,
-                    worker_init_fn=seed_worker,
-                    generator=train_generator,
+                    #ALL run on the same dataset and dont need a asepearte loader
+                train_data = loader(
+                        name="train",
+                        data_path=config.TRAIN.DATA.DATA_PATH,
+                        config_data=config.TRAIN.DATA,
+                        model = config.MODEL.NAME
                     )
-                else:
-                    data_loader_dict['train'] = DataLoader(
+
+                if config.TOOLBOX_MODE == "ENRICH":
+                    enriched_train_set = torch.utils.data.ConcatDataset([train_data, valid_data_loader])
+                   # valid_data = loader(
+                   #     name="valid",
+                   #     data_path=config.VALID.DATA.DATA_PATH,
+                   #     config_data=config.VALID.DATA,
+                   #     model = config.MODEL.NAME
+                   # )
+                    if config.MODEL.NAME == 'DeepPhys' or config.MODEL.NAME == "Tscan":
+
+                        a_len = len(train_data)
+                        ab_len = a_len + len(valid_data_loader)
+
+                        a_indices = list(range(a_len))
+                        b_indices = list(range(a_len, ab_len))
+
+
+                        class MyBatchSampler(torch.utils.data.Sampler):
+                            def __init__(self, a_indices, b_indices, batch_size):
+                                self.a_indices = a_indices
+                                self.b_indices = b_indices
+                                self.batch_size = batch_size
+                            def __iter__(self):
+                                random.shuffle(self.a_indices)
+                                random.shuffle(self.b_indices)
+                                a_batches = self.chunk(self.a_indices, self.batch_size)
+                                b_batches = self.chunk(self.b_indices, self.batch_size)
+                                all_batches = list(a_batches + b_batches)
+                                all_batches = [batch.tolist() for batch in all_batches]
+                                random.shuffle(all_batches)
+                                return iter(all_batches)
+                            def __len__(self):
+                                return (len(self.a_indices) + len(self.b_indices)) // self.batch_size
+                            @staticmethod
+                            def chunk(indices, size):
+                                return torch.split(torch.tensor(indices), size)
+
+                        batch_sampler = MyBatchSampler(a_indices, b_indices, config.TRAIN.BATCH_SIZE)
+
+                        dl = DataLoader(enriched_train_set, batch_sampler=batch_sampler)
+
+                        data_loader_dict['train'] = DataLoader(
                         dataset= enriched_train_set,
                         num_workers=16,
-                        batch_size=config.TRAIN.BATCH_SIZE,
-                        shuffle=True,
+                        # batch_size=config.TRAIN.BATCH_SIZE,
+                        # shuffle=True,
+                        batch_sampler=batch_sampler,
                         worker_init_fn=seed_worker,
                         generator=train_generator,
+                        )
+                    else:
+                        data_loader_dict['train'] = DataLoader(
+                            dataset= enriched_train_set,
+                            num_workers=16,
+                            batch_size=config.TRAIN.BATCH_SIZE,
+                            shuffle=True,
+                            worker_init_fn=seed_worker,
+                            generator=train_generator,
+                        )
+                else:
+                    #withour enrichment
+                    data_loader_dict['train'] = DataLoader(
+                            dataset=train_data,
+                            num_workers=16,
+                            batch_size=config.TRAIN.BATCH_SIZE,
+                            shuffle=True,
+                            worker_init_fn=seed_worker,
+                            generator=train_generator,
                     )
-            else:
-                #withour enrichment
-                data_loader_dict['train'] = DataLoader(
-                        dataset=train_data,
+
+                    valid_data = loader(
+                        name="valid",
+                        data_path=config.VALID.DATA.DATA_PATH,
+                        config_data=config.VALID.DATA,
+                        model = config.MODEL.NAME
+                    )
+
+                    data_loader_dict["valid"] = DataLoader(
+                        dataset=valid_data,
                         num_workers=16,
-                        batch_size=config.TRAIN.BATCH_SIZE,
-                        shuffle=True,
+                        batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
+                        shuffle=False,
                         worker_init_fn=seed_worker,
-                        generator=train_generator,
+                        generator=general_generator,
+                    )
+
+                test_data = loader(
+                    name="test",
+                    data_path=config.TEST.DATA.DATA_PATH,
+                    config_data=config.TEST.DATA,
+                    model=config.MODEL.NAME
                 )
-            # data_loader_dict["valid"] = DataLoader(
-            #     dataset=valid_data,
-            #     num_workers=16,
-            #     batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
-            #     shuffle=False,
-            #     worker_init_fn=seed_worker,
-            #     generator=general_generator,
-            # )
-            test_data = loader(
-                name="test",
-                data_path=config.TEST.DATA.DATA_PATH,
-                config_data=config.TEST.DATA,
-                model=config.MODEL.NAME
-            )
 
-            data_loader_dict["test"] = DataLoader(
-                    dataset=test_data,
-                    num_workers=16,
-                    batch_size=config.INFERENCE.BATCH_SIZE,
-                    shuffle=False,
-                    worker_init_fn=seed_worker,
-                    generator=general_generator,
-            )
+                data_loader_dict["test"] = DataLoader(
+                        dataset=test_data,
+                        num_workers=16,
+                        batch_size=config.INFERENCE.BATCH_SIZE,
+                        shuffle=False,
+                        worker_init_fn=seed_worker,
+                        generator=general_generator,
+                )
 
-            LOO(comet_logger, config, data_loader_dict, i)
+                LOO(comet_logger, config, data_loader_dict, test_i)
 
 
 

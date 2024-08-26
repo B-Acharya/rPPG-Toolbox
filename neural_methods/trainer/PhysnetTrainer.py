@@ -90,7 +90,7 @@ class PhysnetTrainer(pl.LightningModule):
                             torch.std(BVP_label)  # normalize
         loss = self.loss_model(rPPG, BVP_label)
 
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
 
         return loss
 
@@ -121,7 +121,7 @@ class PhysnetTrainer(pl.LightningModule):
         # normalized loss
         loss_ecg = self.loss_model(rPPG_normalized, BVP_label)
 
-        self.log("val_loss", loss_ecg, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss_ecg, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
 
         for idx in range(batch_size):
             subj_index = batch[2][idx]
@@ -181,10 +181,11 @@ class PhysnetTrainer(pl.LightningModule):
             self.parameters(), lr=self.lr, weight_decay=0.0)
 
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        #     optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
-        # return [optimizer], scheduler
-        return optimizer
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
+        return [optimizer], scheduler
+        # return optimizer
+
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
