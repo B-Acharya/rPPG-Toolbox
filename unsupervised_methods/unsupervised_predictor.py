@@ -213,6 +213,10 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
                 else:
                     raise ValueError("Inference evaluation method name wrong!")
 
+                if np.isnan(gt_hr):
+                    print("Nan encountered in GT estimate")
+                    continue
+
                 gt_hr_all.append(gt_hr)
                 predict_hr_all.append(pre_hr)
                 if not DST:
@@ -260,6 +264,7 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
         save_test_outputs(predictions, labels, config, method_name)
 
     print("Used Unsupervised Method: " + method_name)
+
     dataframe = pd.DataFrame.from_dict(predictions_dict).T
     dataframe.to_csv(f"{config.UNSUPERVISED.OUT_SAVE_DIR}/{method_name}_{config.INFERENCE.EVALUATION_METHOD}.csv")
     logger.experiment.log_dataframe_profile(dataframe, "whole-data")
