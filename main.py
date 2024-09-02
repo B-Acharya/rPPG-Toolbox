@@ -788,7 +788,7 @@ if __name__ == "__main__":
                 config.freeze()
 
                 comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                           project_name="Physnet-loss-functions",
+                                           project_name="loss-functions",
                                            workspace="b-acharya",
                                            #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
                                            experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{test_i}_valid_{valid_j}",

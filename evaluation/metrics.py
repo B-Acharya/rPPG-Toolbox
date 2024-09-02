@@ -29,29 +29,29 @@ def metrics_calculations(ground_truth, predictions, SNR, config, logger ):
             MAE = np.mean(np.abs(predictions - ground_truth))
             standard_error = np.std(np.abs(predictions - ground_truth)) / np.sqrt(num_test_samples)
             print("{2} MAE : {0} +/- {1}".format(MAE, standard_error, method))
-            logger.log_metrics({"MAE": MAE})
+            logger.log_metrics({"MAE-TEST": MAE})
         elif metric == "RMSE":
             RMSE = np.sqrt(np.mean(np.square(predictions - ground_truth)))
             standard_error = np.std(np.square(predictions - ground_truth)) / np.sqrt(num_test_samples)
             print("{2} RMSE : {0} +/- {1}".format(RMSE, standard_error, method))
-            logger.log_metrics({"RMSE": RMSE})
+            logger.log_metrics({"RMSE-TEST": RMSE})
         elif metric == "MAPE":
             MAPE = np.mean(np.abs((predictions - ground_truth) / ground_truth)) * 100
             standard_error = np.std(np.abs((predictions - ground_truth) / ground_truth)) / np.sqrt(
                 num_test_samples) * 100
             print("{2} MAPE : {0} +/- {1}".format(MAPE, standard_error, method))
-            logger.log_metrics({"MAPE": MAPE})
+            logger.log_metrics({"MAPE-TEST": MAPE})
         elif metric == "Pearson":
             Pearson = np.corrcoef(predictions, ground_truth)
             correlation_coefficient = Pearson[0][1]
             standard_error = np.sqrt((1 - correlation_coefficient ** 2) / (num_test_samples - 2))
             print("{2} Pearson : {0} +/- {1}".format(correlation_coefficient, standard_error, method))
-            logger.log_metrics({"Pearson": Pearson})
+            logger.log_metrics({"Pearson-TEST": Pearson})
         elif metric == "SNR":
             SNR = np.mean(SNR)
             standard_error = np.std(SNR) / np.sqrt(num_test_samples)
             print("{2} SNR : {0} +/- {1}".format(SNR, standard_error, method))
-            logger.log_metrics({"SNR": SNR})
+            logger.log_metrics({"SNR-TEST": SNR})
         else:
             raise ValueError("Wrong Test Metric Type")
     compare = BlandAltman(ground_truth, predictions, config, logger=logger, averaged=True)
@@ -304,8 +304,9 @@ def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_ou
         for i in range(len(pred_hr_all)):
             pred_hr_all[i] = mean_HR
 
-    log_HR_HR_plot(logger, predictions_dict)
-    plot_bland(logger, predictions_dict)
+    #TODO: If redundant please remove
+    # log_HR_HR_plot(logger, predictions_dict)
+    # plot_bland(logger, predictions_dict)
     filename_id = config.TRAIN.MODEL_FILE_NAME
 
 

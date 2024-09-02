@@ -98,6 +98,10 @@ class PhysnetTrainer(pl.LightningModule):
         self.predictions = dict()
         self.labels = dict()
 
+    def on_test_epoch_start(self) -> None:
+        self.predictions = dict()
+        self.labels = dict()
+
     def validation_step(self, batch, batch_idx):
         """ Runs the model on valid sets."""
 
@@ -147,9 +151,6 @@ class PhysnetTrainer(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """ Runs the model on test sets."""
-
-        self.predictions = dict()
-        self.labels = dict()
 
         if batch is None:
             raise ValueError("No data for test")
