@@ -7,7 +7,7 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch.optim as optim
-from evaluation.metrics import calculate_metrics
+from evaluation.metrics import calculate_metrics, calculate_metrics_epoch
 from neural_methods.loss.NegPearsonLoss import Neg_Pearson
 from neural_methods.model.TS_CAN import TSCAN
 from neural_methods.trainer.BaseTrainer import BaseTrainer
@@ -22,7 +22,6 @@ class TscanTrainer(pl.LightningModule):
         super().__init__()
         #self.device = torch.device(config.DEVICE)
         self.frame_depth = config.MODEL.TSCAN.FRAME_DEPTH
-        self.max_epoch_num = config.TRAIN.EPOCHS
         self.model_dir = config.MODEL.MODEL_DIR
         self.model_file_name = config.TRAIN.MODEL_FILE_NAME
         self.batch_size = config.TRAIN.BATCH_SIZE
@@ -37,14 +36,25 @@ class TscanTrainer(pl.LightningModule):
         self.epochs = config.TRAIN.EPOCHS
         self.predictions = dict()
         self.labels = dict()
+        self.weight_decay = 0.0
+        self.beta1 = 0.9
+        self.beta2 = 0.999
+
         # self.save_hyperparameters()
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE=="RAY_LOO":
             self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 
             self.num_train_batches = len(data_loader["train"])
-            self.criterion = torch.nn.MSELoss()
+
+            if config.MODEL.LOSS=="MSE":
+                self.criterion = torch.nn.MSELoss()
+            elif config.MODEL.LOSS == "NEGPEARSON":
+                raise NotImplementedError
+            else:
+                raise NotImplementedError
+
         elif config.TOOLBOX_MODE == "only_test":
             self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TEST.DATA.PREPROCESS.RESIZE.H).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
@@ -69,11 +79,21 @@ class TscanTrainer(pl.LightningModule):
         self.log("train_loss", loss, on_step=True, on_epoch=True, batch_size=self.config.TRAIN.BATCH_SIZE, sync_dist=True )
         return loss
 
+    def on_validation_epoch_start(self)-> None:
+        self.predictions = dict()
+        self.labels = dict()
+
+    def on_test_epoch_start(self) -> None:
+        self.predictions = dict()
+        self.labels = dict()
+
     def validation_step(self, batch, batch_idx):
         """ Model evaluation on the validation dataset."""
 
         if batch is None:
             raise ValueError("No data for valid")
+
+        batch_size = batch[0].shape[0]
 
         data_valid, labels_valid = batch[0].to(
                     self.device), batch[1].to(self.device)
@@ -87,7 +107,17 @@ class TscanTrainer(pl.LightningModule):
         # self.logger.log_metrics({"val_loss" : loss, }, self.current_epoch)
         # self.log("val_loss", loss, on_step=True)
         self.log("val_loss", loss, batch_size=self.config.TRAIN.BATCH_SIZE, on_epoch=True, on_step=True)
-        return loss
+
+        for idx in range(batch_size):
+            subj_index = batch[2][idx]
+            sort_index = int(batch[3][idx])
+            if subj_index not in self.predictions.keys():
+                self.predictions[subj_index] = dict()
+                self.labels[subj_index] = dict()
+            self.predictions[subj_index][sort_index] = pred_ppg_valid[
+                                                       idx * self.test_chunk_len:(idx + 1) * self.test_chunk_len]
+            self.labels[subj_index][sort_index] = labels_valid[
+                                                      idx * self.test_chunk_len:(idx + 1) * self.test_chunk_len]
 
     def test_step(self, batch, batch_idx):
         """ Model evaluation on the testing dataset."""
@@ -146,15 +176,30 @@ class TscanTrainer(pl.LightningModule):
         calculate_metrics(self.predictions, self.labels, self.config, self.logger)
 
     def configure_optimizers(self):
-        # optimizer = optim.AdamW(
-        #     self.parameters(), lr=self.lr, weight_decay=0)
-        #
+        optimizer = optim.AdamW(
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        #     optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
-        optimizer = optim.Adadelta(self.parameters(), lr=self.lr )
-        # return [optimizer], scheduler
-        return optimizer
+        if self.config.MODEL.SCHEDULER == "OneCycle":
+            print("Using OneCycle HR")
+            print("number of steps", self.trainer.estimated_stepping_batches)
+            print(" epcohs and batches", self.epochs, self.num_train_batches)
+            print("000" * 100)
+            scheduler = {
+                "scheduler" : torch.optim.lr_scheduler.OneCycleLR(
+                optimizer, max_lr = self.lr, total_steps=self.trainer.estimated_stepping_batches),
+                "interval": "step"
+            }
+
+            return [optimizer], [scheduler]
+
+        elif self.config.MODEL.SCHEDULER == "ReduceOnPlatue":
+            raise NotImplementedError
+            # return [optimizer], [scheduler]
+
+        else:
+            print("No scheduler used")
+            return [optimizer]
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
@@ -175,6 +220,19 @@ class TscanTrainer(pl.LightningModule):
             new_key = ".".join(key.split(".")[1:])
             new_dict[new_key] = torch_dict[key]
         return new_dict
+
+    def on_validation_epoch_end(self)-> None:
+
+        MAE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
+        print("In validation_epoch_end")
+        if self.config.MODEL.SCHEDULER == "OneCycle":
+            self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
+            self.log("lr-logged", self.lr)
+        self.log("MSE", MAE)
+        self.log("RMSE", RMSE)
+        self.log("MAPE", MAPE)
+        # self.log("Pearson", Pearson) Nans why ?
+        self.log("SNR", SNR)
 
     def check_weights(self):
         for param in self.model.parameters():

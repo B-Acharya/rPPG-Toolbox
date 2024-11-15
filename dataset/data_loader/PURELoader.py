@@ -59,8 +59,7 @@ class PURELoader(BaseLoader):
 
         data_dirs = temp
         if not data_dirs:
-            # raise ValueError(self.dataset_name + " data paths empty!")
-            pass
+            raise ValueError(self.dataset_name + " data paths empty!")
         dirs = list()
         for data_dir in data_dirs:
             subject_trail_val = os.path.split(data_dir)[-1].replace('-', '')
@@ -140,11 +139,11 @@ class PURELoader(BaseLoader):
         else:
             raise ValueError(f'Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}.')
 
-
-        # bvps = self.read_wave(
-        #     os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
-        bvps = self.read_wave(
-            os.path.join(self.raw_data_path, "{0}.json".format(filename)))
+        if config_preprocess.USE_PSUEDO_PPG_LABEL:
+            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+        else:
+            bvps = self.read_wave(
+                os.path.join(self.raw_data_path, "{0}.json".format(filename)))
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
         # if config_preprocess.TRIM:

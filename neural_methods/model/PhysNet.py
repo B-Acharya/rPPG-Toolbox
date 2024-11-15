@@ -134,3 +134,4 @@ class PhysNet_padding_Encoder_Decoder_MAX(nn.Module):
         rPPG = x.view(-1, length)
 
         return rPPG, x_visual, x_visual3232, x_visual1616
+        # return rPPG

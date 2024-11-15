@@ -2,6 +2,7 @@
 import os
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
@@ -35,16 +36,19 @@ class PhysnetTrainer(pl.LightningModule):
         self.epochs = config.TRAIN.EPOCHS
         self.predictions = dict()
         self.labels = dict()
+        self.weight_decay = 0.0
+        self.beta1 = 0.9
+        self.beta2 = 0.999
 
         self.model = PhysNet_padding_Encoder_Decoder_MAX(
             frames=config.MODEL.PHYSNET.FRAME_NUM).to(self.device)  # [3, T, 128,128]
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE=="RAY_LOO":
             self.num_train_batches = len(data_loader["train"])
 
-            if config.MODEL.PHYSNET.LOSS == "MSE":
+            if config.MODEL.LOSS == "MSE":
                 self.loss_model = torch.nn.MSELoss()
-            elif config.MODEL.PHYSNET.LOSS == "NEGPEARSON":
+            elif config.MODEL.LOSS == "NEGPEARSON":
                 self.loss_model = Neg_Pearson()
             else:
                 raise ValueError("Loss not supported")
@@ -141,9 +145,14 @@ class PhysnetTrainer(pl.LightningModule):
         return loss_ecg
 
     def on_validation_epoch_end(self)-> None:
-        MSE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
+
+        MAE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
+        self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
+        self.log("lr-logged", self.lr)
+
         print("In validation_epoch_end")
-        self.log("MSE", MSE)
+
+        self.log("MSE", MAE)
         self.log("RMSE", RMSE)
         self.log("MAPE", MAPE)
         # self.log("Pearson", Pearson) Nans why ?
@@ -179,13 +188,23 @@ class PhysnetTrainer(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=0.0)
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay, betas= (self.beta1, self.beta2))
 
         # See more details on the OneCycleLR scheduler here: https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
-        return [optimizer], scheduler
-        # return optimizer
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        #     optimizer, max_lr=self.lr, epochs=self.epochs, steps_per_epoch=self.num_train_batches)
+
+        print("number of steps",self.trainer.estimated_stepping_batches)
+        print(" epcohs and batches",self.epochs, self.num_train_batches)
+        print("000"*100)
+
+        scheduler = {
+            "scheduler" : torch.optim.lr_scheduler.OneCycleLR(
+                optimizer, max_lr = self.lr, total_steps=self.trainer.estimated_stepping_batches),
+            "interval": "step"
+        }
+
+        return [optimizer], [scheduler]
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
@@ -194,3 +213,5 @@ class PhysnetTrainer(pl.LightningModule):
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
         torch.save(self.model.state_dict(), model_path)
         print('Saved Model Path: ', model_path)
+
+

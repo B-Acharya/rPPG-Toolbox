@@ -347,7 +347,6 @@ def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, sav
         gt_hr_all = list()
         SNR_all = list()
         predictions_dict = dict()
-
         for index in tqdm(predictions.keys(), ncols=80):
             prediction = _reform_data_from_dict(predictions[index])
             label = _reform_data_from_dict(labels[index])
@@ -387,6 +386,7 @@ def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, sav
 
                 gt_hr_all.append(gt_hr)
                 pred_hr_all.append(pre_hr)
+                SNR_all.append(SNR)
 
                 predictions_dict[str(i) + "_" + index] = {"GT_HR": gt_hr, "Pred_HR": pre_hr}
 
@@ -394,9 +394,9 @@ def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, sav
         # plot_bland(logger, predictions_dict)
         print(predictions_dict)
 
-        dataframe = pd.DataFrame.from_dict(predictions_dict).T
+        # dataframe = pd.DataFrame.from_dict(predictions_dict).T
 
-        logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+        # logger.experiment.log_dataframe_profile(dataframe, "whole-data")
 
         MAE, RMSE, MAPE, Pearson, SNR = metrics_calculations_epoch(gt_hr_all, pred_hr_all, SNR_all, config)
 

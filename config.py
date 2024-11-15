@@ -357,11 +357,13 @@ _C.MODEL.RESUME = ''
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
 _C.MODEL.MODEL_DIR = 'PreTrainedModels'
+_C.MODEL.SCHEDULER = None
+_C.MODEL.LOSS = "MSE"
 
 # Specific parameters for physnet parameters
 _C.MODEL.PHYSNET = CN()
 _C.MODEL.PHYSNET.FRAME_NUM = 64
-_C.MODEL.PHYSNET.LOSS = "NEGPEASRSON"
+# _C.MODEL.PHYSNET.LOSS = "NEGPEASRSON"
 
 # -----------------------------------------------------------------------------
 # Specific parameters for iBVPNet parameters
@@ -374,6 +376,8 @@ _C.MODEL.iBVPNet.FRAME_NUM = 64
 # -----------------------------------------------------------------------------
 _C.MODEL.TSCAN = CN()
 _C.MODEL.TSCAN.FRAME_DEPTH = 10
+# _C.MODEL.TSCAN.LOSS = "MSE"
+
 
 # -----------------------------------------------------------------------------
 # Model Settings for EfficientPhys
