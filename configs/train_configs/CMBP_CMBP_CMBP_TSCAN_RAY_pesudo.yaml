@@ -1,15 +1,16 @@
 BASE: ['']
 TOOLBOX_MODE: "RAY_LOO"      # "train_and_test"  or "only_test"
+FOLD: 3
 TRAIN:
   BATCH_SIZE: 4
-  EPOCHS: 40
+  EPOCHS: 50
   LR: 1.0
   USE_LR_FINDER: False
   MODEL_FILE_NAME: CMBP_CMBP_CMBP_TSCAN_RAY_LOO
   DATA:
     FS: 25
     DATASET: CMBP
-    DO_PREPROCESS: True # if first time, should be true
+    DO_PREPROCESS: False # if first time, should be true
     DATA_FORMAT: NDCHW
     DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
 #    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
@@ -18,6 +19,7 @@ TRAIN:
     BEGIN: 0.0
     END: 1.0
     PREPROCESS:
+      USE_PSUEDO_PPG_LABEL: True
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: Standardized
@@ -48,6 +50,7 @@ VALID:
     BEGIN: 0.8
     END: 0.9
     PREPROCESS:
+      USE_PSUEDO_PPG_LABEL: True
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       LABEL_TYPE: Standardized
       DO_CHUNK: True
@@ -64,7 +67,7 @@ VALID:
         H: 36
         W: 36
 TEST:
-  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  METRICS: ['MAE','RMSE','MAPE','Pearson','SNR']
   USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
   DATA:
     FS: 25
@@ -78,6 +81,7 @@ TEST:
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
+      USE_PSUEDO_PPG_LABEL: True
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       LABEL_TYPE: Standardized
       DO_CHUNK: True
@@ -98,7 +102,7 @@ NUM_OF_GPU_TRAIN: 1
 EARLY_STOPPING:
   PATIENCE: 10
   DELTA: 0.001
-  TRAIN: True
+  TRAIN: False
   VALID: False
 LOG:
   PATH: runs/exp
