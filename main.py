@@ -301,12 +301,14 @@ def train_func(config_ray):
         #                            default_root_dir=config.MODEL.MODEL_DIR, logger=comet_logger,
         #                            max_epochs=config.TRAIN.EPOCHS, callbacks=[early_stop_callback,lr_monitor,checkpoint_callback])
     elif config.EARLY_STOPPING.VALID:
-        early_stop_callback = EarlyStopping(monitor="val_loss_epoch", min_delta=config.EARLY_STOPPING.DELTA, patience=config.EARLY_STOPPING.PATIENCE, verbose=True,
+        print("In early stopping valid function")
+        early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=config.EARLY_STOPPING.DELTA, patience=config.EARLY_STOPPING.PATIENCE, verbose=True,
                                             mode="min")
-        trainer_light = pl.Trainer(accelerator='auto', devices="auto",
-                                   strategy=RayDDPStrategy(),
-                                   default_root_dir=config.MODEL.MODEL_DIR, max_epochs=config.TRAIN.EPOCHS,
-                                   callbacks=[RayTrainReportCallback(), early_stop_callback, lr_monitor], plugins=[RayLightningEnvironment()],
+        trainer_light = pl.Trainer(accelerator='auto', devices="auto", strategy=RayDDPStrategy(),
+                                   default_root_dir=config.MODEL.MODEL_DIR,
+                                   max_epochs=config_ray["epochs"],
+                                   callbacks=[RayTrainReportCallback(), early_stop_callback, lr_monitor],
+                                   plugins=[RayLightningEnvironment()],
                                    enable_progress_bar=False)
 
         trainer_light = prepare_trainer(trainer_light)
@@ -351,56 +353,56 @@ def train_func(config_ray):
 
                 trainer_light = prepare_trainer(trainer_light)
 
-        # Find the best lr
-        if config.TRAIN.USE_LR_FINDER:
-            # finding the best lr
-            from lightning.pytorch.tuner.tuning import Tuner
-            tuner = Tuner(trainer_light)
-            if config.TEST.USE_LAST_EPOCH:
-                lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'])
-            else:
-                # lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
-                #                       val_dataloaders=data_loader_dict['valid'])
-                lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
-                                          val_dataloaders=data_loader_dict['test'])
-            fig = lr_finder.plot(suggest=True, show=True )
-            plt.savefig("/homes/bacharya/lr_learningrate.png")
-            plt.close()
-            # comet_logger.log_figure(figure=fig, figure_name="lr-curve")
-
-            new_lr = lr_finder.suggestion()
-
-            model_trainer.lr = new_lr
-
-            # comet_logger.add_tags(
-            #     ['lr-finder'])
-
-            print(model_trainer.lr)
-
-        else:
-            print("Using lr:", model_trainer.lr)
-            print("Using batch:", model_trainer.batch_size)
-            print("Using epochs:", model_trainer.max_epoch_num)
-            print("Weight decay set to :", model_trainer.weight_decay)
-
-        # if config.MODEL.NAME == "MEAN":
-        #     trainer_light.test( dataloaders=data_loader_dict['test'])
-
+    # Find the best lr
+    if config.TRAIN.USE_LR_FINDER:
+        # finding the best lr
+        from lightning.pytorch.tuner.tuning import Tuner
+        tuner = Tuner(trainer_light)
         if config.TEST.USE_LAST_EPOCH:
-            trainer_light.fit(model_trainer, data_loader_dict['train'])
-            comet_logger.add_tag("last_epoch")
-            trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
+            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'])
         else:
+            # lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
+            #                       val_dataloaders=data_loader_dict['valid'])
+            lr_finder = tuner.lr_find(model_trainer, train_dataloaders=data_loader_dict['train'],
+                                      val_dataloaders=data_loader_dict['test'])
+        fig = lr_finder.plot(suggest=True, show=True )
+        plt.savefig("/homes/bacharya/lr_learningrate.png")
+        plt.close()
+        # comet_logger.log_figure(figure=fig, figure_name="lr-curve")
 
-            trainer_light.fit(model_trainer, train_dataloaders=data_loader_dict['train'],  val_dataloaders=data_loader_dict['valid'])
-            # trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['test'])
-            # comet_logger.add_tag("best_epoch")
-            trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['valid'])
+        new_lr = lr_finder.suggestion()
 
-        # #load and test the model on the best epoch / last epoch
-        # experiment_key = comet_logger.experiment.get_key()
-        # comet_logger = cometlogger(experiment_key=experiment_key)
-        # trainer_light = pl.trainer(logger=comet_logger)
+        model_trainer.lr = new_lr
+
+        # comet_logger.add_tags(
+        #     ['lr-finder'])
+
+        print(model_trainer.lr)
+
+    else:
+        print("Using lr:", model_trainer.lr)
+        print("Using batch:", model_trainer.batch_size)
+        print("Using epochs:", model_trainer.max_epoch_num)
+        print("Weight decay set to :", model_trainer.weight_decay)
+
+    # if config.MODEL.NAME == "MEAN":
+    #     trainer_light.test( dataloaders=data_loader_dict['test'])
+
+    if config.TEST.USE_LAST_EPOCH:
+        trainer_light.fit(model_trainer, data_loader_dict['train'])
+        comet_logger.add_tag("last_epoch")
+        trainer_light.test(ckpt_path="last", dataloaders=data_loader_dict['test'])
+
+    else:
+        trainer_light.fit(model_trainer, train_dataloaders=data_loader_dict['train'],  val_dataloaders=data_loader_dict['valid'])
+        # trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['test'])
+        # comet_logger.add_tag("best_epoch")
+        trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['valid'])
+
+    # #load and test the model on the best epoch / last epoch
+    # experiment_key = comet_logger.experiment.get_key()
+    # comet_logger = cometlogger(experiment_key=experiment_key)
+    # trainer_light = pl.trainer(logger=comet_logger)
 
 def LOO(comet_logger, config, data_loader_dict, outer):
     """trains the model."""
@@ -1214,8 +1216,17 @@ if __name__ == "__main__":
                 pass
                 tags.append("ReduceOnPlatue")
 
+            elif config.EARLY_STOPPING.VALID:
+                print("Early stopping via pytorch lighting is used here")
+                search_space = {
+                    "lr": tune.loguniform(1e-7, 1.0),
+                    "epochs": tune.choice([50]),
+                    "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                }
+                tags.append("EarlyStopping-Valid")
+
             else:
-                print("No scheduler used")
+                print("scheduler was not used")
                 search_space = {
                     "lr": tune.loguniform(1e-7, 1.0),
                     "epochs": tune.choice([50]),
@@ -1247,9 +1258,10 @@ if __name__ == "__main__":
 
             comet_callback = CometLoggerCallback(
                 True,
+                workspace='loss-functions',
                 api_key='V1x7OI9PoIRM8yze4prM2FPcE',
-                project_name= project_name,
-                tags= tags
+                project_name=project_name,
+                tags=tags,
             )
 
             # TODO: who takes care of checkpointintg
@@ -1270,7 +1282,7 @@ if __name__ == "__main__":
 
             # trainable_with_gpu = tune.with_resources(ray_trainer, {"gpu": 1})
 
-            if config.MODEL.SCHEDULER == "OneCycle" or config.MODEL.SCHEDULER == "ReduceOnPlatue":
+            if config.MODEL.SCHEDULER == "OneCycle" or config.MODEL.SCHEDULER == "ReduceOnPlatue" or config.EARLY_STOPPING.VALID:
                 tuner = tune.Tuner(
                     ray_trainer,
                     # trainable_with_gpu,
