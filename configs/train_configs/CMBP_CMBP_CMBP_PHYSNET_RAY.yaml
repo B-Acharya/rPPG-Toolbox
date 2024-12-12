@@ -106,10 +106,16 @@ LOG:
 MODEL:
   DROP_RATE: 0.2
   NAME: Physnet
+  LOSS: "MSE"
   PHYSNET:
     FRAME_NUM: 128
-    LOSS: "MSE"
   MODEL_DIR: "/vol/rPPG/models/"    # Processed dataset save path, need to be updated
+  SCHEDULER: None
+EARLY_STOPPING:
+  PATIENCE: 10
+  DELTA: 0.001
+  TRAIN: False
+  VALID: True
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"

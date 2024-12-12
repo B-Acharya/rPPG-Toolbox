@@ -147,8 +147,9 @@ class PhysnetTrainer(pl.LightningModule):
     def on_validation_epoch_end(self)-> None:
 
         MAE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
-        self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
-        self.log("lr-logged", self.lr)
+        if self.config.MODEL.SCHEDULER == "OneCycle":
+            self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
+            self.log("lr-logged", self.lr)
 
         print("In validation_epoch_end")
 
@@ -196,15 +197,24 @@ class PhysnetTrainer(pl.LightningModule):
 
         print("number of steps",self.trainer.estimated_stepping_batches)
         print(" epcohs and batches",self.epochs, self.num_train_batches)
-        print("000"*100)
 
-        scheduler = {
-            "scheduler" : torch.optim.lr_scheduler.OneCycleLR(
-                optimizer, max_lr = self.lr, total_steps=self.trainer.estimated_stepping_batches),
-            "interval": "step"
-        }
+        if self.config.MODEL.SCHEDULER == "OneCycle":
+            scheduler = {
+                "scheduler" : torch.optim.lr_scheduler.OneCycleLR(
+                    optimizer, max_lr = self.lr, total_steps=self.trainer.estimated_stepping_batches),
+                "interval": "step"
+            }
 
-        return [optimizer], [scheduler]
+            return [optimizer], [scheduler]
+
+        elif self.config.MODEL.SCHEDULER == "ReduceOnPlatue":
+            raise NotImplementedError
+            # return [optimizer], [scheduler]
+
+        else:
+            print("No scheduler used")
+            return [optimizer]
+
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
