@@ -17,14 +17,24 @@ import lightning.pytorch as pl
 
 class TscanTrainer(pl.LightningModule):
 
-    def __init__(self, config, data_loader):
+    def __init__(self, config, data_loader, dropout_rate1= 0.25 , dropout_rate2=0.5,
+                 lr=None,
+                 epochs = None,
+                 batch_size = None,
+                 weight_decay = None,
+                 save_dir = None):
         """Inits parameters from args and the writer for TensorboardX."""
         super().__init__()
         #self.device = torch.device(config.DEVICE)
         self.frame_depth = config.MODEL.TSCAN.FRAME_DEPTH
         self.model_dir = config.MODEL.MODEL_DIR
         self.model_file_name = config.TRAIN.MODEL_FILE_NAME
-        self.batch_size = config.TRAIN.BATCH_SIZE
+
+        if batch_size == None:
+            self.batch_size = config.TRAIN.BATCH_SIZE
+        else:
+            self.batch_size = batch_size
+
         self.num_of_gpu = config.NUM_OF_GPU_TRAIN
         self.base_len = self.num_of_gpu * self.frame_depth
         self.chunk_len = config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH
@@ -32,18 +42,42 @@ class TscanTrainer(pl.LightningModule):
         self.config = config
         self.min_valid_loss = None
         self.best_epoch = 0
-        self.lr = config.TRAIN.LR
-        self.epochs = config.TRAIN.EPOCHS
+
+        #added for ray tune to adjust the hyperparamters
+        if lr == None:
+            self.lr = config.TRAIN.LR
+        else:
+            self.lr = lr
+
+        if epochs == None:
+            self.epochs = config.TRAIN.EPOCHS
+        else:
+            self.epochs = epochs
+
+        if weight_decay == None:
+            self.weight_decay = 0.0
+        else:
+            self.weight_decay = weight_decay
+
+        if save_dir == None:
+            self.save_dir = config.TEST.OUT_SAVE_DIR
+        else:
+            self.save_dir = save_dir
+
         self.predictions = dict()
         self.labels = dict()
-        self.weight_decay = 0.0
+
+
         self.beta1 = 0.9
         self.beta2 = 0.999
+
+        self.drop_rate1 = dropout_rate1
+        self.drop_rate2 = dropout_rate2
 
         # self.save_hyperparameters()
 
         if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE=="RAY_LOO":
-            self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
+            self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H, dropout_rate1=self.drop_rate1, dropout_rate2=self.drop_rate2).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 
             self.num_train_batches = len(data_loader["train"])
@@ -56,7 +90,8 @@ class TscanTrainer(pl.LightningModule):
                 raise NotImplementedError
 
         elif config.TOOLBOX_MODE == "only_test":
-            self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TEST.DATA.PREPROCESS.RESIZE.H).to(self.device)
+            # self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TEST.DATA.PREPROCESS.RESIZE.H).to(self.device)
+            self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H, dropout_rate1=self.drop_rate1, dropout_rate2=self.drop_rate2).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
         else:
             raise ValueError("TS-CAN trainer initialized in incorrect toolbox mode!")
@@ -173,7 +208,7 @@ class TscanTrainer(pl.LightningModule):
                 self.labels[subj_index][sort_index] = labels_test[idx * self.test_chunk_len:(idx + 1) * self.test_chunk_len]
 
     def on_test_end(self) -> None:
-        calculate_metrics(self.predictions, self.labels, self.config, self.logger)
+        prediction_dict = calculate_metrics(self.predictions, self.labels, self.config, self.logger, save_dir=self.save_dir)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(
@@ -223,7 +258,7 @@ class TscanTrainer(pl.LightningModule):
 
     def on_validation_epoch_end(self)-> None:
 
-        MAE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
+        MAE, RMSE, MAPE, Pearson, SNR, _ = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
         print("In validation_epoch_end")
         if self.config.MODEL.SCHEDULER == "OneCycle":
             self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])

@@ -46,7 +46,7 @@ def metrics_calculations(ground_truth, predictions, SNR, config, logger ):
             correlation_coefficient = Pearson[0][1]
             standard_error = np.sqrt((1 - correlation_coefficient ** 2) / (num_test_samples - 2))
             print("{2} Pearson : {0} +/- {1}".format(correlation_coefficient, standard_error, method))
-            logger.log_metrics({"Pearson-TEST": Pearson})
+            # logger.log_metrics({"Pearson-TEST": Pearson})
         elif metric == "SNR":
             SNR = np.mean(SNR)
             standard_error = np.std(SNR) / np.sqrt(num_test_samples)
@@ -68,17 +68,22 @@ def metrics_calculations(ground_truth, predictions, SNR, config, logger ):
         the_title=f'{filename_id}_peak_BlandAltman_DifferencePlot',
         file_name=f'{filename_id}_peak_BlandAltman_DifferencePlot.pdf')
 
-def save_test_outputs( predictions, labels, config, method_name):
-    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "train_and_test_enrich":
-        output_dir = config.TEST.OUT_SAVE_DIR
+def save_test_outputs( predictions, labels, config, method_name, save_dir = None):
+
+
+    if save_dir == None:
+        if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO":
+            output_dir = config.TEST.OUT_SAVE_DIR
+        else:
+            output_dir = config.UNSUPERVISED.DATA.CACHED_PATH
     else:
-        output_dir = config.UNSUPERVISED.DATA.CACHED_PATH
+        output_dir = save_dir
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
     # Filename ID to be used in any output files that get saved
-    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich":
+    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO":
         filename_id = config.TRAIN.MODEL_FILE_NAME
     elif config.TOOLBOX_MODE == 'only_test':
         model_file_root = config.INFERENCE.MODEL_PATH.split("/")[-1].split(".pth")[0]
@@ -192,7 +197,7 @@ def _reform_data_from_dict(data, flatten=True):
 
     return sort_data
 
-def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_outputs=True):
+def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_outputs=True, save_dir=None):
     """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
     pred_hr_all = list()
     gt_hr_all = list()
@@ -312,10 +317,11 @@ def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_ou
 
     dataframe = pd.DataFrame.from_dict(predictions_dict).T
     if save_outputs:
-        out_dir = save_test_outputs(predictions, labels, config, filename_id)
+        out_dir = save_test_outputs(predictions, labels, config, filename_id, save_dir=save_dir)
         dataframe.to_csv(f"{out_dir}/{config.MODEL.NAME}_{config.TRAIN.MODEL_FILE_NAME}_{config.INFERENCE.EVALUATION_METHOD}.csv")
 
-    logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+    # logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+    logger.log_metrics(predictions_dict)
 
     metrics_calculations(gt_hr_all, pred_hr_all, SNR_all, config, logger)
 
@@ -340,6 +346,7 @@ def calculate_metrics(predictions, labels, config, logger, mean_HR = 70, save_ou
             print(f"--{key}--")
             print(mae)
             logger.log_metrics({key: mae})
+    return predictions_dict
 
 def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, save_outputs=True):
         """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
@@ -422,7 +429,7 @@ def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, sav
                 print(f"--{key}--")
                 print(mae)
                 logger.log_metrics({key: mae})
-        return MAE, RMSE, MAPE, Pearson, SNR
+        return MAE, RMSE, MAPE, Pearson, SNR, predictions_dict
 def metrics_calculations_epoch(ground_truth, predictions, SNR, config):
 
     ground_truth = np.array(ground_truth)

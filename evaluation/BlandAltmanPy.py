@@ -52,7 +52,7 @@ class BlandAltman():
 
         # Define save path
         if config != None:
-            if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH":
+            if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "RAY_LOO":
                 self.save_path  = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'bland_altman_plots')
             elif config.TOOLBOX_MODE == 'unsupervised_method':
                 self.save_path  = os.path.join(config.LOG.PATH, config.UNSUPERVISED.DATA.EXP_DATA_NAME, 'bland_altman_plots')
@@ -120,7 +120,8 @@ class BlandAltman():
         plt.xlim(measure_lower_lim, measure_upper_lim)
         plt.ylim(measure_lower_lim, measure_upper_lim)
         if self.logger!= None:
-            self.logger.experiment.log_figure(figure=plt, figure_name="Scatter-Plot")
+            # self.logger.experiment.log_figure(figure=plt, figure_name="Scatter-Plot")
+            self.logger.experiment.add_figure(tag='scatter-plot', figure=fig)
         if self.plot:
             plt.show()
         else:
@@ -159,7 +160,8 @@ class BlandAltman():
             ax.legend()
         ax.grid()
         if self.logger != None:
-            self.logger.experiment.log_figure(figure=plt, figure_name="Difference-Plot")
+            # self.logger.experiment.log_figure(figure=plt, figure_name="Difference-Plot")
+            self.logger.experiment.add_figure(tag='difference-plot',figure=fig)
 
         if self.plot:
             plt.show()

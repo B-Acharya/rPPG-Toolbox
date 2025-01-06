@@ -11,7 +11,7 @@ import torch
 from config import get_config
 from dataset import data_loader
 from neural_methods import trainer
-from unsupervised_methods.unsupervised_predictor import unsupervised_predict
+from unsupervised_methods.unsupervised_predictor import unsupervised_predict, unsupervised_HR_predict
 from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -159,6 +159,9 @@ def train_func(config_ray):
 
     print(config_ray)
 
+    save_dir = ray.train.get_context().get_trial_dir()
+    print(save_dir)
+
     data_loader_dict = dict() # dictionary of data loaders
 
     if config.TRAIN.DATA.DATASET == "CMBP":
@@ -250,7 +253,15 @@ def train_func(config_ray):
     elif config.MODEL.NAME == "iBVPNet":
         model_trainer = trainer.iBVPNetTrainer.iBVPNetTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == "Tscan":
-        model_trainer = trainer.TscanTrainer.TscanTrainer(config, data_loader_dict)
+        model_trainer = trainer.TscanTrainer.TscanTrainer(config,
+                                                          data_loader_dict,
+                                                          dropout_rate1=config_ray['dropout_rate1'],
+                                                          dropout_rate2=config_ray['dropout_rate2'],
+                                                          lr=config_ray['lr'],
+                                                          epochs=config_ray['epochs'],
+                                                          batch_size=config_ray['batch_size'],
+                                                          weight_decay=config_ray['weight_decay'],
+                                                          save_dir = save_dir)
     elif config.MODEL.NAME == "EfficientPhys":
         model_trainer = trainer.EfficientPhysTrainer.EfficientPhysTrainer(config, data_loader_dict)
     elif config.MODEL.NAME == 'DeepPhys':
@@ -272,11 +283,11 @@ def train_func(config_ray):
 
     #update hyperparameters from search space
     # Additional parameters need to be added here
-    model_trainer.lr = config_ray['lr']
+    #Now set above , when the class is instanciated
     model_trainer.max_epoch_num = config_ray['epochs']
-    model_trainer.epochs = config_ray['epochs']
-    model_trainer.batch_size = config_ray['batch_size']
-    model_trainer.weight_decay = config_ray['weight_decay']
+    # model_trainer.epochs = config_ray['epochs']
+    # model_trainer.batch_size = config_ray['batch_size']
+    # model_trainer.weight_decay = config_ray['weight_decay']
 
     #create checkpoint every epoch and track the validation loss
     if config.TEST.USE_LAST_EPOCH:
@@ -397,7 +408,7 @@ def train_func(config_ray):
         trainer_light.fit(model_trainer, train_dataloaders=data_loader_dict['train'],  val_dataloaders=data_loader_dict['valid'])
         # trainer_light.fit(model_trainer, data_loader_dict['train'], data_loader_dict['test'])
         # comet_logger.add_tag("best_epoch")
-        trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['valid'])
+        trainer_light.test(ckpt_path="best", dataloaders=data_loader_dict['test'])
 
     # #load and test the model on the best epoch / last epoch
     # experiment_key = comet_logger.experiment.get_key()
@@ -670,6 +681,47 @@ def test(config, data_loader_dict):
         trainer_light.test(model_trainer, ckpt_path=config.INFERENCE.MODEL_PATH, dataloaders=data_loader_dict['test'])
 
 
+def unsupervised_HR(config, data_loader):
+
+    if not config.UNSUPERVISED.METHOD:
+        raise ValueError("Please set unsupervised method in yaml!")
+    for unsupervised_method in config.UNSUPERVISED.METHOD:
+        run_name = unsupervised_method
+        comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
+                                   #project_name="unsupervised-methods",
+                                   project_name="SIT-dataset-unsupervised",
+                                   workspace="b-acharya",
+                                   experiment_name=f"{run_name}",
+                                   log_code=False
+                                   )
+        comet_logger.experiment.add_tag(f"{config.UNSUPERVISED.DATA.DATASET}")
+        comet_logger.experiment.add_tag(f"{config.INFERENCE.EVALUATION_METHOD}")
+        if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
+            comet_logger.experiment.add_tag(f"Smaller_windows size:{config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE}")
+
+        if unsupervised_method == "POS":
+            unsupervised_HR_predict(config, data_loader, "POS", comet_logger)
+        elif unsupervised_method == "CHROM":
+            unsupervised_HR_predict(config, data_loader, "CHROM", comet_logger)
+        elif unsupervised_method == "ICA":
+            unsupervised_HR_predict(config, data_loader, "ICA", comet_logger)
+        elif unsupervised_method == "GREEN":
+            unsupervised_HR_predict(config, data_loader, "GREEN", comet_logger)
+        elif unsupervised_method == "BLUE":
+            unsupervised_HR_predict(config, data_loader, "BLUE", comet_logger)
+        elif unsupervised_method == "RED":
+            unsupervised_HR_predict(config, data_loader, "RED", comet_logger)
+        elif unsupervised_method == "LGI":
+            unsupervised_HR_predict(config, data_loader, "LGI", comet_logger)
+        elif unsupervised_method == "PBV":
+            unsupervised_HR_predict(config, data_loader, "PBV", comet_logger)
+        elif unsupervised_method == "dummy":
+            unsupervised_HR_predict(config, data_loader, "dummy", comet_logger)
+        elif unsupervised_method == "random":
+            unsupervised_HR_predict(config, data_loader, "random", comet_logger)
+        else:
+            raise ValueError("Not supported unsupervised method!")
+
 def unsupervised_method_inference(config, data_loader):
 
     if not config.UNSUPERVISED.METHOD:
@@ -921,7 +973,7 @@ if __name__ == "__main__":
         else:
             data_loader_dict['test'] = None
 
-    elif config.TOOLBOX_MODE == "unsupervised_method":
+    elif config.TOOLBOX_MODE == "unsupervised_method" or config.TOOLBOX_MODE == "unsupervised_predict":
         # unsupervised method dataloader
         if config.UNSUPERVISED.DATA.DATASET == "COHFACE":
             unsupervised_loader = data_loader.COHFACELoader.COHFACELoader
@@ -945,6 +997,8 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.UBFCPHYSLoader.UBFCPHYSLoader
         elif config.UNSUPERVISED.DATA.DATASET == "iBVP":
             unsupervised_loader = data_loader.iBVPLoader.iBVPLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "SIT":
+            unsupervised_loader = data_loader.SITLoader.SITLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC-rPPG, PURE, MMPD, \
                              SCAMPS, BP4D+, UBFC-PHYS and iBVP.")
@@ -1218,20 +1272,67 @@ if __name__ == "__main__":
 
             elif config.EARLY_STOPPING.VALID:
                 print("Early stopping via pytorch lighting is used here")
-                search_space = {
-                    "lr": tune.loguniform(1e-7, 1.0),
-                    "epochs": tune.choice([50]),
-                    "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
-                }
+
+                if config.MODEL.NAME == "Tscan" and config.MODEL.OPTIMIZE_DROP_RATE:
+                    print("drop rate in hyperparameter search")
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        # "epochs": tune.choice([50]),
+                        "epochs": tune.choice([1]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                        "dropout_rate1": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5]),
+                        "dropout_rate2": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5])
+                    }
+                    tags.append("Drop-rate")
+
+                elif config.MODEl.NAME == "Physnet" and config.MODEL.OPTIMIZE_DROP_RATE:
+
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        "epochs": tune.choice([50]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                    }
+                    tags.append("Drop-rate")
+
+                else:
+                    print("drop rate was not optimized")
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        "epochs": tune.choice([50]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                    }
+
                 tags.append("EarlyStopping-Valid")
 
             else:
                 print("scheduler was not used")
-                search_space = {
-                    "lr": tune.loguniform(1e-7, 1.0),
-                    "epochs": tune.choice([50]),
-                    "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
-                }
+
+                if config.MODEL.NAME == "Tscan" and config.MODEL.OPTIMIZE_DROP_RATE:
+                    print("drop rate in hyperparameter search")
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        "epochs": tune.choice([50]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                        "dropout_rate1": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5]),
+                        "dropout_rate2": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5])
+                    }
+                    tags.append("Drop-rate")
+                elif config.MODEl.NAME == "Physnet" and config.MODEL.OPTIMIZE_DROP_RATE:
+
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        "epochs": tune.choice([50]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                    }
+                    tags.append("Drop-rate")
+
+                else:
+                    print("drop rate was not optimized")
+                    search_space = {
+                        "lr": tune.loguniform(1e-7, 1.0),
+                        "epochs": tune.choice([50]),
+                        "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
+                    }
 
                 #scheduler for the trails should be only used here
                 num_epochs = config.TRAIN.EPOCHS
@@ -1254,7 +1355,11 @@ if __name__ == "__main__":
                 resources_per_worker={"CPU": 20, "GPU": 1}
             )
 
-            project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER)
+            if config.MODEL.OPTIMIZE_DROP_RATE:
+                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER) + "drop_rate" + str(config.MODEL.OPTIMIZE_DROP_RATE)
+            else:
+                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER)
+
 
             comet_callback = CometLoggerCallback(
                 True,
@@ -1290,7 +1395,7 @@ if __name__ == "__main__":
                     tune_config=tune.TuneConfig(
                         metric="val_loss_epoch",
                         mode="min",
-                        num_samples=50,
+                        num_samples=100,
                         search_alg=search_algo,
                         trial_name_creator=trail_name,
                     ),
@@ -1304,7 +1409,7 @@ if __name__ == "__main__":
                     tune_config=tune.TuneConfig(
                         metric="val_loss_epoch",
                         mode="min",
-                        num_samples=50,
+                        num_samples=100,
                         search_alg=search_algo,
                         scheduler=scheduler,
                         trial_name_creator=trail_name,
@@ -1353,5 +1458,7 @@ if __name__ == "__main__":
         test(config, data_loader_dict)
     elif config.TOOLBOX_MODE == "unsupervised_method":
         unsupervised_method_inference(config, data_loader_dict)
+    elif config.TOOLBOX_MODE == "unsupervised_predict":
+        unsupervised_HR(config, data_loader_dict)
     else:
         print("TOOLBOX_MODE only support train_and_test or only_test !", end='\n\n')
