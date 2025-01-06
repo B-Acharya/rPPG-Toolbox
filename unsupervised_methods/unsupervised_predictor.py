@@ -39,7 +39,7 @@ def save_test_outputs( predictions, labels, config, method_name):
     elif config.TOOLBOX_MODE == 'only_test':
         model_file_root = config.INFERENCE.MODEL_PATH.split("/")[-1].split(".pth")[0]
         filename_id = model_file_root + "_" + config.TEST.DATA.DATASET
-    elif config.TOOLBOX_MODE == 'unsupervised_method':
+    elif config.TOOLBOX_MODE == 'unsupervised_method' or 'unsupervised_predict':
         filename_id = method_name
     else:
         raise ValueError('Metrics.py evaluation only supports train_and_test and only_test!')
@@ -61,6 +61,94 @@ def calcualte_mae_per_setting(dataframe):
     standard_error = np.std(np.abs(dataframe["HR_GT"] - dataframe["HR_Pred"])) / np.sqrt(len(dataframe))
     return mae, standard_error
 
+def unsupervised_HR_predict(config, data_loader, method_name, logger, log=True, save_outputs=True):
+
+    if data_loader["unsupervised"] is None:
+        raise ValueError("No data for unsupervised method predicting")
+    print("===Unsupervised Method ( " + method_name + " ) Predicting ===")
+
+    fps_data = pd.read_csv("./result_frame_fps.csv")
+
+
+    gt_hr_all = []
+    predict_hr_all = []
+    predictions_dict = dict()
+    predictions = dict()
+    labels = dict()
+    SNR_all = []
+
+
+    sbar = tqdm(data_loader["unsupervised"], ncols=80)
+    for _, test_batch in enumerate(sbar):
+        batch_size = test_batch[0].shape[0]
+        for idx in range(batch_size):
+            data_input, labels_input = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
+            filename = test_batch[2][idx]
+            subject_id, subject_part = filename.split('_')
+            fps = fps_data[(fps_data['id']==subject_id) & (fps_data['part']==subject_part)]['fps'].item()
+
+            index = test_batch[2]
+            MAE_per_scenarios = dict()
+            if method_name == "POS":
+                BVP = POS_WANG(data_input, config.UNSUPERVISED.DATA.FS)
+            elif method_name == "CHROM":
+                BVP = CHROME_DEHAAN(data_input, config.UNSUPERVISED.DATA.FS)
+            elif method_name == "ICA":
+                BVP = ICA_POH(data_input, config.UNSUPERVISED.DATA.FS)
+            elif method_name == "GREEN":
+                BVP = GREEN(data_input)
+            elif method_name == "RED":
+                BVP = RED(data_input)
+            elif method_name == "BLUE":
+                BVP = BLUE(data_input)
+            elif method_name == "LGI":
+                BVP = LGI(data_input)
+            elif method_name == "PBV":
+                BVP = PBV(data_input)
+            elif method_name == "dummy" or method_name == "random":
+                BVP = labels_input
+            else:
+                raise ValueError("unsupervised method name wrong!")
+
+            if save_outputs:
+                predictions[filename] = BVP
+                print(BVP.shape)
+                labels[filename] = labels_input
+
+            video_frame_size = test_batch[0].shape[1]
+            if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
+                window_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE * config.UNSUPERVISED.DATA.FS
+                if window_frame_size > video_frame_size:
+                    window_frame_size = video_frame_size
+            else:
+                window_frame_size = video_frame_size
+
+            for i in range(0, len(BVP), window_frame_size):
+                BVP_window = BVP[i:i+window_frame_size]
+                try:
+                    pre_hr = calculate_HR(BVP_window, fs=fps, diff_flag=False, hr_method='Welch')
+                except:
+                    print('--'*100)
+                    print('--'*100)
+                    print(subject_part, subject_id, fps)
+                    print('--'*100)
+                    print('--'*100)
+                    continue
+
+                predict_hr_all.append(pre_hr)
+
+                predictions_dict[filename ] = {"Pred_HR": pre_hr}
+
+    if save_outputs:
+        save_test_outputs(predictions, labels, config, method_name)
+
+    print("Used Unsupervised Method: " + method_name)
+    dataframe = pd.DataFrame.from_dict(predictions_dict).T
+    dataframe.to_csv(f"{config.UNSUPERVISED.OUT_SAVE_DIR}/{method_name}_{config.INFERENCE.EVALUATION_METHOD}.csv")
+    logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+    dataframe['GT_HR'].plot.hist()
+    logger.experiment.log_figure(figure=plt, figure_name="GT-Histogram")
+    plt.close()
 
 def unsupervised_predict(config, data_loader, method_name, logger, log=True, save_outputs=True):
     """ Model evaluation on the testing dataset."""
@@ -278,9 +366,9 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
                 result['LowHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
             elif index[-1] == "1":
                 result['LowHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
-            if index[-1] == "2":
+            elif index[-1] == "2":
                 result['HighHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
-            if index[-1] == "3":
+            elif index[-1] == "3":
                 result['HighHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
 
         df = pd.DataFrame.from_dict(dict(sorted(predictions_dict.items())))
