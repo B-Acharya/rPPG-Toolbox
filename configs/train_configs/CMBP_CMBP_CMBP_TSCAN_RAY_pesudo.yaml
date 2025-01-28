@@ -81,7 +81,7 @@ TEST:
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
-      USE_PSUEDO_PPG_LABEL: True
+      USE_PSUEDO_PPG_LABEL: False
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       LABEL_TYPE: Standardized
       DO_CHUNK: True
@@ -103,12 +103,15 @@ EARLY_STOPPING:
   PATIENCE: 10
   DELTA: 0.001
   TRAIN: False
-  VALID: False
+  VALID: True
 LOG:
   PATH: runs/exp
 MODEL:
+  LOSS: "MSE"
   DROP_RATE: 0.2
+  OPTIMIZE_DROP_RATE: True
   NAME: Tscan
+  SCHEDULER: None
   TSCAN:
     FRAME_DEPTH: 10
 #  MODEL_DIR: "/data/rppg_23_bi_video_nt_lab/rppg_processed/Models"    # Processed dataset save path, need to be updated

@@ -287,6 +287,7 @@ class BaseLoader(Dataset):
             m = n - l
             if m >= 0:
                 Cn = np.true_divide(RGB[m:n, :], np.mean(RGB[m:n, :], axis=0))
+                #why the complext conjugate ?
                 Cn = np.mat(Cn).H
                 S = np.matmul(np.array([[0, 1, -1], [-2, 1, 1]]), Cn)
                 h = S[0, :] + (np.std(S[0, :]) / np.std(S[1, :])) * S[1, :]

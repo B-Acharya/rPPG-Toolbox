@@ -103,8 +103,8 @@ def get_participant_index(pathfile):
 def create_path_list(listdf, train, test, i, j=0, outer=True):
     train_df = listdf[listdf['id'].isin(train)]
     test_df = listdf[listdf['id'].isin(test)]
-    if outer:
 
+    if outer:
         train_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_train.csv"
         test_path = pathlib.Path(listdf["input_files"][0]).parent / f"fold_{i}_test.csv"
         train_df.to_csv(str(train_path))
@@ -1204,6 +1204,7 @@ if __name__ == "__main__":
         list_file['id'] = list_file['input_files'].apply(get_participant_index)
         participants = sorted(list(set(list_file['id'])))
 
+        ray.init(_temp_dir="/homes/bacharya/ray_tune_logs/")
 
         for test_i, (train_index, test_index) in enumerate(kf.split(participants)):
 
@@ -1229,6 +1230,17 @@ if __name__ == "__main__":
             train_df = pd.read_csv(train_path)
             valid_df = pd.read_csv(valid_path)
             test_df = pd.read_csv(test_path)
+
+            if config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL:
+                if not config.TEST.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL:
+
+                    # Should only use psuedo labels for training and testing should be with gt ppg signal
+                    test_df = pd.read_csv(test_path)
+
+                    # should make sure that there is already a folder with similar preprocessing done wihtout pseudo labels
+                    test_df = test_df.replace('PSEUDO_LABELTrue', 'PSEUDO_LABELFalse', regex=True)
+                    test_df.to_csv(test_path)
+
 
             print("-"*100)
             print(train_participants_inner)
@@ -1277,19 +1289,20 @@ if __name__ == "__main__":
                     print("drop rate in hyperparameter search")
                     search_space = {
                         "lr": tune.loguniform(1e-7, 1.0),
-                        # "epochs": tune.choice([50]),
-                        "epochs": tune.choice([1]),
+                        "epochs": tune.choice([50]),
+                        # "epochs": tune.choice([1]),
                         "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
                         "dropout_rate1": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5]),
                         "dropout_rate2": tune.choice([0.1, 0.2, 0.3, 0.4, 0.5])
                     }
                     tags.append("Drop-rate")
 
-                elif config.MODEl.NAME == "Physnet" and config.MODEL.OPTIMIZE_DROP_RATE:
+                elif config.MODEL.NAME == "Physnet" and config.MODEL.OPTIMIZE_DROP_RATE:
 
                     search_space = {
                         "lr": tune.loguniform(1e-7, 1.0),
-                        "epochs": tune.choice([50]),
+                        # "epochs": tune.choice([50]),
+                        "epochs": tune.choice([1]),
                         "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
                     }
                     tags.append("Drop-rate")

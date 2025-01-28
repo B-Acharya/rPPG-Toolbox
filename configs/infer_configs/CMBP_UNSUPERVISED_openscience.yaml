@@ -1,0 +1,37 @@
+BASE: ['']
+TOOLBOX_MODE: "unsupervised_method"      # "train_and_test"  or "only_test" or "unsupervised_method"
+UNSUPERVISED:
+  METHOD: ["RED", "BLUE", "GREEN"]
+#  METHOD: ["ICA", "POS", "CHROM", "GREEN", "LGI", "PBV"]
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  OUT_SAVE_DIR: "/homes/bacharya/gp_rppg/dataset/"
+  DATA:
+    FS: 25
+    DATASET: CMBP
+    DO_PREPROCESS: True # if first time, should be true
+    DATA_FORMAT: NDHWC
+    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/open-science/"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/open-science-processed/"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: ['Raw']
+      DATA_AUG: ['None']    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
+      LABEL_TYPE: Raw
+      DO_CHUNK: False
+      CHUNK_LENGTH: 180
+      CROP_FACE:
+        DO_CROP_FACE: True
+        USE_LARGE_FACE_BOX: True
+        LARGE_BOX_COEF: 1.5
+        DETECTION:
+          DO_DYNAMIC_DETECTION: False
+          DYNAMIC_DETECTION_FREQUENCY : 30
+          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
+      RESIZE:
+        H: 36
+        W: 36
+INFERENCE:
+  EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
+

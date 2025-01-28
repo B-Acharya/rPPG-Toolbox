@@ -356,6 +356,7 @@ _C.MODEL.NAME = ''
 _C.MODEL.RESUME = ''
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
+_C.MODEL.OPTIMIZE_DROP_RATE = False
 _C.MODEL.MODEL_DIR = 'PreTrainedModels'
 _C.MODEL.SCHEDULER = None
 _C.MODEL.LOSS = "MSE"
@@ -488,8 +489,9 @@ def update_config(config, args):
                                       "Large_size{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                       "Dyamic_Det{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
                                         "det_len{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY),
-                                        "Median_face_box{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX)
-                                              ])
+                                        "Median_face_box{0}".format(config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX),
+                                      "PSEUDO_LABEL{0}".format(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL)
+        ])
     config.TRAIN.DATA.CACHED_PATH = os.path.join(config.TRAIN.DATA.CACHED_PATH, config.TRAIN.DATA.EXP_DATA_NAME)
 
     name, ext = os.path.splitext(config.TRAIN.DATA.FILE_LIST_PATH)
@@ -524,8 +526,9 @@ def update_config(config, args):
                                         "Large_size{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                         "Dyamic_Det{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
                                           "det_len{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY),
-                                          "Median_face_box{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX)
-                                                ])
+                                          "Median_face_box{0}".format(config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX),
+                                        "PSEUDO_LABEL{0}".format(config.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL)
+                                                        ])
         config.VALID.DATA.CACHED_PATH = os.path.join(config.VALID.DATA.CACHED_PATH, config.VALID.DATA.EXP_DATA_NAME)
 
         name, ext = os.path.splitext(config.VALID.DATA.FILE_LIST_PATH)
@@ -561,8 +564,9 @@ def update_config(config, args):
                                       "Large_size{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.LARGE_BOX_COEF),
                                       "Dyamic_Det{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.DO_DYNAMIC_DETECTION),
                                         "det_len{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY),
-                                        "Median_face_box{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX)
-                                              ])
+                                        "Median_face_box{0}".format(config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX),
+                                      "PSEUDO_LABEL{0}".format(config.TEST.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL)
+                                                   ])
     config.TEST.DATA.CACHED_PATH = os.path.join(config.TEST.DATA.CACHED_PATH, config.TEST.DATA.EXP_DATA_NAME)
 
     name, ext = os.path.splitext(config.TEST.DATA.FILE_LIST_PATH)

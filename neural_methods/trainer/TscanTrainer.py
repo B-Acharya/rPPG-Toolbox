@@ -263,7 +263,7 @@ class TscanTrainer(pl.LightningModule):
         if self.config.MODEL.SCHEDULER == "OneCycle":
             self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
             self.log("lr-logged", self.lr)
-        self.log("MSE", MAE)
+        self.log("MAE", MAE)
         self.log("RMSE", RMSE)
         self.log("MAPE", MAPE)
         # self.log("Pearson", Pearson) Nans why ?

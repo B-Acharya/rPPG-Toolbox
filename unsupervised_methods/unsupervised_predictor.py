@@ -84,8 +84,11 @@ def unsupervised_HR_predict(config, data_loader, method_name, logger, log=True, 
         for idx in range(batch_size):
             data_input, labels_input = test_batch[0][idx].cpu().numpy(), test_batch[1][idx].cpu().numpy()
             filename = test_batch[2][idx]
-            subject_id, subject_part = filename.split('_')
-            fps = fps_data[(fps_data['id']==subject_id) & (fps_data['part']==subject_part)]['fps'].item()
+
+
+            # added for sit
+            # subject_id, subject_part = filename.split('_')
+            # fps = fps_data[(fps_data['id']==subject_id) & (fps_data['part']==subject_part)]['fps'].item()
 
             index = test_batch[2]
             MAE_per_scenarios = dict()

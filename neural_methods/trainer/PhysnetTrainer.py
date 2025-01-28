@@ -146,7 +146,7 @@ class PhysnetTrainer(pl.LightningModule):
 
     def on_validation_epoch_end(self)-> None:
 
-        MAE, RMSE, MAPE, Pearson, SNR = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
+        MAE, RMSE, MAPE, Pearson, SNR, _ = calculate_metrics_epoch(self.predictions, self.labels, self.config, self.logger)
         if self.config.MODEL.SCHEDULER == "OneCycle":
             self.log("lr-step", self.lr_schedulers().get_last_lr()[-1])
             self.log("lr-logged", self.lr)
@@ -179,7 +179,7 @@ class PhysnetTrainer(pl.LightningModule):
             self.labels[subj_index][sort_index] = label[idx]
 
     def on_test_end(self) -> None:
-        calculate_metrics(self.predictions, self.labels, self.config, self.logger)
+        prediction_dict = calculate_metrics(self.predictions, self.labels, self.config, self.logger, save_dir=self.save_dir)
 
     # def on_before_optimizer_step(self, optimizer):
     #     # Compute the 2-norm for each layer
