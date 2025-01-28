@@ -8,4 +8,5 @@ import dataset.data_loader.CMBPLoader
 import dataset.data_loader.BP4DPlusLoader
 import dataset.data_loader.VIPLLoader
 import dataset.data_loader.DSTLoader
+import dataset.data_loader.SITLoader
 
