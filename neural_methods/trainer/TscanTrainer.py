@@ -76,7 +76,7 @@ class TscanTrainer(pl.LightningModule):
 
         # self.save_hyperparameters()
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE=="RAY_LOO":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE=="RAY_LOO" or config.TOOLBOX_MODE=="RAY_LOO_TEST":
             self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H, dropout_rate1=self.drop_rate1, dropout_rate2=self.drop_rate2).to(self.device)
             # self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
 

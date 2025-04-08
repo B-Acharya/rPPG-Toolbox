@@ -1,6 +1,7 @@
 BASE: ['']
 TOOLBOX_MODE: "RAY_LOO"      # "train_and_test"  or "only_test"
 FOLD: 3
+METRIC_VAL: "HR"
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 50

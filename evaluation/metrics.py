@@ -72,7 +72,7 @@ def save_test_outputs( predictions, labels, config, method_name, save_dir = None
 
 
     if save_dir == None:
-        if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO":
+        if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO" or config.TOOLBOX_MODE=="RAY_LOO_TEST":
             output_dir = config.TEST.OUT_SAVE_DIR
         else:
             output_dir = config.UNSUPERVISED.DATA.CACHED_PATH
@@ -83,7 +83,7 @@ def save_test_outputs( predictions, labels, config, method_name, save_dir = None
         os.makedirs(output_dir, exist_ok=True)
 
     # Filename ID to be used in any output files that get saved
-    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO":
+    if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE == "train_and_test_enrich" or config.TOOLBOX_MODE == "RAY_LOO" or config.TOOLBOX_MODE=="RAY_LOO_TEST":
         filename_id = config.TRAIN.MODEL_FILE_NAME
     elif config.TOOLBOX_MODE == 'only_test':
         model_file_root = config.INFERENCE.MODEL_PATH.split("/")[-1].split(".pth")[0]
@@ -430,6 +430,90 @@ def calculate_metrics_epoch(predictions, labels, config, logger, mean_HR=70, sav
                 print(mae)
                 logger.log_metrics({key: mae})
         return MAE, RMSE, MAPE, Pearson, SNR, predictions_dict
+
+
+def calculate_metrics_epoch_slide(predictions, labels, config, logger, mean_HR=70, save_outputs=True):
+    """Calculate rPPG Metrics (MAE, RMSE, MAPE, Pearson Coef.)."""
+    pred_hr_all = list()
+    gt_hr_all = list()
+    SNR_all = list()
+    predictions_dict = dict()
+    for index in tqdm(predictions.keys(), ncols=80):
+        prediction = _reform_data_from_dict(predictions[index])
+        label = _reform_data_from_dict(labels[index])
+
+        video_frame_size = prediction.shape[0]
+        print("Video frame size", video_frame_size, index)
+        if config.INFERENCE.EVALUATION_WINDOW.USE_SMALLER_WINDOW:
+            window_frame_size = config.INFERENCE.EVALUATION_WINDOW.WINDOW_SIZE
+            if window_frame_size > video_frame_size:
+                window_frame_size = video_frame_size
+        else:
+            window_frame_size = video_frame_size
+
+        for i in range(0, len(prediction) - window_frame_size + 1):
+            pred_window = prediction[i:i + window_frame_size]
+            label_window = label[i:i + window_frame_size]
+
+            if len(pred_window) < 9:
+                print(
+                    f"Window frame size of {len(pred_window)} is smaller than minimum pad length of 9. Window ignored!")
+                continue
+
+            if config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Standardized" or \
+                    config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Raw":
+                diff_flag_test = False
+            elif config.TEST.DATA.PREPROCESS.LABEL_TYPE == "DiffNormalized":
+                diff_flag_test = True
+            else:
+                raise ValueError("Unsupported label type in testing!")
+
+            if config.INFERENCE.EVALUATION_METHOD == "Welch":
+                gt_hr, pre_hr, SNR = calculate_metric_per_video(
+                    pred_window, label_window, high_pass=3.0, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS,
+                    hr_method='Welch')
+            else:
+                raise ValueError("Inference evaluation method name wrong!")
+
+            gt_hr_all.append(gt_hr)
+            pred_hr_all.append(pre_hr)
+            SNR_all.append(SNR)
+
+            predictions_dict[str(i) + "_" + index] = {"GT_HR": gt_hr, "Pred_HR": pre_hr}
+
+    # log_HR_HR_plot(logger, predictions_dict)
+    # plot_bland(logger, predictions_dict)
+    print(predictions_dict)
+
+    # dataframe = pd.DataFrame.from_dict(predictions_dict).T
+
+    # logger.experiment.log_dataframe_profile(dataframe, "whole-data")
+
+    MAE, RMSE, MAPE, Pearson, SNR = metrics_calculations_epoch(gt_hr_all, pred_hr_all, SNR_all, config)
+
+    if config.TEST.DATA.DATASET == "CMBP":
+        result = {'LowHR_Bright': {}, 'LowHR_Dark': {}, 'HighHR_Dark': {}, 'HighHR_Bright': {}}
+        for index in predictions_dict.keys():
+            print(index)
+            HR_GT, HR_pred = predictions_dict[index]["GT_HR"], predictions_dict[index]["Pred_HR"]
+
+            if index[-1] == "0":
+                result['LowHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            elif index[-1] == "1":
+                result['LowHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            if index[-1] == "2":
+                result['HighHR_Dark'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+            if index[-1] == "3":
+                result['HighHR_Bright'][index[:-1]] = {"HR_GT": float(HR_GT), "HR_Pred": float(HR_pred)}
+
+        for key in result.keys():
+            dataframe = pd.DataFrame.from_dict(result[key]).T
+            mae = calcualte_mae_per_setting(dataframe)
+            print(f"--{key}--")
+            print(mae)
+            logger.log_metrics({key: mae})
+    return MAE, RMSE, MAPE, Pearson, SNR, predictions_dict
+
 def metrics_calculations_epoch(ground_truth, predictions, SNR, config):
 
     ground_truth = np.array(ground_truth)

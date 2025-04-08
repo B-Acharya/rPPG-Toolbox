@@ -19,7 +19,7 @@ from lightning.pytorch.utilities import grad_norm
 
 class PhysnetTrainer(pl.LightningModule):
 
-    def __init__(self, config, data_loader):
+    def __init__(self, config, data_loader, save_dir=None):
         """Inits parameters from args and the writer for TensorboardX."""
         super().__init__()
         # self.device = torch.device(config.DEVICE)
@@ -40,10 +40,15 @@ class PhysnetTrainer(pl.LightningModule):
         self.beta1 = 0.9
         self.beta2 = 0.999
 
+        if save_dir == None:
+            self.save_dir = config.TEST.OUT_SAVE_DIR
+        else:
+            self.save_dir = save_dir
+
         self.model = PhysNet_padding_Encoder_Decoder_MAX(
             frames=config.MODEL.PHYSNET.FRAME_NUM).to(self.device)  # [3, T, 128,128]
 
-        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE=="RAY_LOO":
+        if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH" or config.TOOLBOX_MODE=="RAY_LOO" or config.TOOLBOX_MODE=="RAY_LOO_TEST":
             self.num_train_batches = len(data_loader["train"])
 
             if config.MODEL.LOSS == "MSE":
@@ -153,7 +158,7 @@ class PhysnetTrainer(pl.LightningModule):
 
         print("In validation_epoch_end")
 
-        self.log("MSE", MAE)
+        self.log("MAE", MAE)
         self.log("RMSE", RMSE)
         self.log("MAPE", MAPE)
         # self.log("Pearson", Pearson) Nans why ?

@@ -3,7 +3,6 @@
 import argparse
 import random
 import time
-from comet_ml.integration.ray import CometTrainLoggerCallback, comet_worker_logger
 
 import numpy as np
 import pandas as pd
@@ -13,20 +12,24 @@ from dataset import data_loader
 from neural_methods import trainer
 from unsupervised_methods.unsupervised_predictor import unsupervised_predict, unsupervised_HR_predict
 from torch.utils.data import DataLoader
+
+
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch.strategies import DDPStrategy
+
 import matplotlib.pyplot as plt
 import pathlib
 from sklearn.model_selection import KFold, train_test_split
 from pathlib import Path
 
-from ray.tune.search import ConcurrencyLimiter
-from ray.tune.search.optuna import OptunaSearch
-
-from ray.tune.search.ax import AxSearch
+# Uncommet for toolbox env
+# from ray.tune.search import ConcurrencyLimiter
+# from ray.tune.search.optuna import OptunaSearch
+# from ray.tune.search.ax import AxSearch
+# from comet_ml.integration.ray import CometTrainLoggerCallback, comet_worker_logger
 
 RANDOM_SEED = 100
 torch.manual_seed(RANDOM_SEED)
@@ -45,31 +48,31 @@ train_generator = torch.Generator()
 train_generator.manual_seed(RANDOM_SEED)
 torch.set_float32_matmul_precision("high")
 
-from ray.air.integrations.comet import CometLoggerCallback
-import ray
+# from ray.air.integrations.comet import CometLoggerCallback
+# import ray
+# #
+# from ray.util import inspect_serializability
+# import threading
+#
+# lock = threading.Lock()
+#
+# #ray tune imports
+# from ray.train.torch import TorchTrainer
+# from ray.train import RunConfig, ScalingConfig, CheckpointConfig
+#
+# from ray.train.lightning import (
+#     RayDDPStrategy,
+#     RayLightningEnvironment,
+#     RayTrainReportCallback,
+#     prepare_trainer,
+# )
+# from ray import tune
+# from ray.tune.schedulers import ASHAScheduler
 
-from ray.util import inspect_serializability
-import threading
 
-lock = threading.Lock()
-
-#ray tune imports
-from ray.train.torch import TorchTrainer
-from ray.train import RunConfig, ScalingConfig, CheckpointConfig
-
-from ray.train.lightning import (
-    RayDDPStrategy,
-    RayLightningEnvironment,
-    RayTrainReportCallback,
-    prepare_trainer,
-)
-from ray import tune
-from ray.tune.schedulers import ASHAScheduler
-
-
-#to get accurate stack
-# import os
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+# to get accurate stack
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 
 
@@ -100,7 +103,7 @@ def get_participant_index(pathfile):
             else:
                 return int(index[:2])
 
-def create_path_list(listdf, train, test, i, j=0, outer=True):
+def greate_path_list(listdf, train, test, i, j=0, outer=True):
     train_df = listdf[listdf['id'].isin(train)]
     test_df = listdf[listdf['id'].isin(test)]
 
@@ -658,7 +661,7 @@ def test(config, data_loader_dict):
 
     comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
                                # project_name="Strat-exp1",
-                               project_name="Exp3-cmbp-on-public-Start2",
+                               project_name="phsynet-loo",
                                workspace="b-acharya",
                                experiment_name= f"{config.MODEL.NAME}_{config.TEST.DATA.DATASET}_{config.TRAIN.MODEL_FILE_NAME}",
                                log_code=True
@@ -1167,10 +1170,10 @@ if __name__ == "__main__":
 
 
     # get it? relu but ray_loo XD
-    elif config.TOOLBOX_MODE == "RAY_LOO":
+    elif config.TOOLBOX_MODE == "RAY_LOO" or config.TOOLBOX_MODE == "RAY_LOO_TEST":
         K_fold = 10
 
-        if config.TRAIN.DATA.DATASET == "CMBP":
+        if config.TRAIN.DATA.DATASET == "CMBP" or config.TEST.DATA.DATASET == "CMBP":
             loader = data_loader.CMBPLoader.CMBPLoader
             basepath = pathlib.Path(config.TRAIN.DATA.DATA_PATH)
             kf_inner = KFold(n_splits=9, shuffle=True, random_state=42)
@@ -1180,20 +1183,20 @@ if __name__ == "__main__":
 
         #dataloader for training
         if (config.TRAIN.DATA.DATASET and config.TRAIN.DATA.DATA_PATH):
-            train_data_loader = loader(
-                name="train",
-                data_path=config.TRAIN.DATA.DATA_PATH,
-                config_data=config.TRAIN.DATA,
-                model=config.MODEL.NAME
-            )
-            data_loader_dict['train'] = DataLoader(
-                dataset=train_data_loader,
-                num_workers=16,
-                batch_size=config.TRAIN.BATCH_SIZE,
-                shuffle=False,
-                worker_init_fn=seed_worker,
-                generator=train_generator,
-            )
+                train_data_loader = loader(
+                    name="train",
+                    data_path=config.TRAIN.DATA.DATA_PATH,
+                    config_data=config.TRAIN.DATA,
+                    model=config.MODEL.NAME
+                )
+                data_loader_dict['train'] = DataLoader(
+                    dataset=train_data_loader,
+                    num_workers=16,
+                    batch_size=config.TRAIN.BATCH_SIZE,
+                    shuffle=False,
+                    worker_init_fn=seed_worker,
+                    generator=train_generator,
+                )
         else:
             raise NotImplementedError
 
@@ -1231,8 +1234,22 @@ if __name__ == "__main__":
             valid_df = pd.read_csv(valid_path)
             test_df = pd.read_csv(test_path)
 
+
             if config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL:
+
+                if not config.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL:
+
+                    print("Using GT labels for validataion set")
+
+                    valid_df = pd.read_csv(valid_path)
+
+                    # should make sure that there is already a folder with similar preprocessing done wihtout pseudo labels
+                    valid_df = valid_df.replace('PSEUDO_LABELTrue', 'PSEUDO_LABELFalse', regex=True)
+                    valid_df.to_csv(valid_path)
+
                 if not config.TEST.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL:
+
+                    print("Using GT labels for test set")
 
                     # Should only use psuedo labels for training and testing should be with gt ppg signal
                     test_df = pd.read_csv(test_path)
@@ -1260,6 +1277,30 @@ if __name__ == "__main__":
             config.VALID.DATA.DO_PREPROCESS = False
             config.TEST.DATA.DO_PREPROCESS = False
             config.freeze()
+
+
+            #test the best models that are found
+            if config.TOOLBOX_MODE == "RAY_LOO_TEST":
+
+                test_data = loader(
+                    name="test",
+                    data_path=config.TEST.DATA.DATA_PATH,
+                    config_data=config.TEST.DATA,
+                    model=config.MODEL.NAME
+                )
+
+                data_loader_dict["test"] = DataLoader(
+                    dataset=test_data,
+                    num_workers=2,
+                    batch_size=config.INFERENCE.BATCH_SIZE,
+                    # batch_size=config_ray['batch_size'],
+                    shuffle=False,
+                    worker_init_fn=seed_worker,
+                    # generator=general_generator,
+                )
+
+                test(config, data_loader_dict)
+                break
 
 
             #TODO: If we use a generator to initialize the dataloader, the line below will crash it.
@@ -1301,8 +1342,8 @@ if __name__ == "__main__":
 
                     search_space = {
                         "lr": tune.loguniform(1e-7, 1.0),
-                        # "epochs": tune.choice([50]),
-                        "epochs": tune.choice([1]),
+                        "epochs": tune.choice([50]),
+                        # "epochs": tune.choice([1]),
                         "weight_decay": tune.choice([1e-4, 1e-3, 1e-5, 1e-6, 1e-2, 1e-1, 0.0]),
                     }
                     tags.append("Drop-rate")
@@ -1369,9 +1410,9 @@ if __name__ == "__main__":
             )
 
             if config.MODEL.OPTIMIZE_DROP_RATE:
-                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER) + "drop_rate" + str(config.MODEL.OPTIMIZE_DROP_RATE)
+                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER) + "drop_rate" + str(config.MODEL.OPTIMIZE_DROP_RATE) + "_VAL_METRIC_" + str(config.METRIC_VAL)
             else:
-                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER)
+                project_name = config.MODEL.NAME + "_fold_" + str(test_i) + "_loss_" + config.MODEL.LOSS + "_pseudo_label_" + str(config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL) + "_Scheduler_" + str(config.MODEL.SCHEDULER) + "_VAL_METRIC_" + str(config.METRIC_VAL)
 
 
             comet_callback = CometLoggerCallback(
@@ -1400,15 +1441,25 @@ if __name__ == "__main__":
 
             # trainable_with_gpu = tune.with_resources(ray_trainer, {"gpu": 1})
 
+            metric_dict = {
+                'HR': 'MAE',
+                "LOSS": 'val_loss_epoch'
+            }
+
+            print("-"*50)
+            print("Metric used to select the best model:", metric_dict[str(config.METRIC_VAL)])
+            print("-"*50)
+
             if config.MODEL.SCHEDULER == "OneCycle" or config.MODEL.SCHEDULER == "ReduceOnPlatue" or config.EARLY_STOPPING.VALID:
                 tuner = tune.Tuner(
                     ray_trainer,
                     # trainable_with_gpu,
                     param_space={"train_loop_config": search_space},
                     tune_config=tune.TuneConfig(
-                        metric="val_loss_epoch",
+                        metric=metric_dict[str(config.METRIC_VAL)],
                         mode="min",
                         num_samples=100,
+                        # num_samples=1,
                         search_alg=search_algo,
                         trial_name_creator=trail_name,
                     ),
@@ -1420,9 +1471,10 @@ if __name__ == "__main__":
                     # trainable_with_gpu,
                     param_space={"train_loop_config": search_space},
                     tune_config=tune.TuneConfig(
-                        metric="val_loss_epoch",
+                        metric=metric_dict[str(config.METRIC_VAL)],
                         mode="min",
                         num_samples=100,
+                        # num_samples=1,
                         search_alg=search_algo,
                         scheduler=scheduler,
                         trial_name_creator=trail_name,

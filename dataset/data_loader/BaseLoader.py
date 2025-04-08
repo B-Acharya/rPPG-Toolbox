@@ -27,6 +27,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import random
 from scipy.signal import welch
+# from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
 
 def get_hr(y, sr=30, min=30, max=180):
     p, q = welch(y, sr, nfft=1e5 / sr, nperseg=np.min((len(y) - 1, 256)))
@@ -427,6 +428,7 @@ class BaseLoader(Dataset):
             # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
             # (x,y) corresponds to the top-left corner of the zone to define using
             # the computed width and height.
+            # print(frame.shape)
             face_zone = detector.detectMultiScale(frame)
 
             if len(face_zone) < 1:
@@ -444,6 +446,8 @@ class BaseLoader(Dataset):
             # Use a TensorFlow-based RetinaFace implementation for face detection
             # This utilizes both the CPU and GPU
             res = RetinaFace.detect_faces(frame)
+            print("Res printo")
+            print(res)
 
             if len(res) > 0:
                 # Pick the highest score

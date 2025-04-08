@@ -67,7 +67,7 @@ def unsupervised_HR_predict(config, data_loader, method_name, logger, log=True, 
         raise ValueError("No data for unsupervised method predicting")
     print("===Unsupervised Method ( " + method_name + " ) Predicting ===")
 
-    fps_data = pd.read_csv("./result_frame_fps.csv")
+    fps_data = pd.read_csv("./result_frame_fps_missing.csv")
 
 
     gt_hr_all = []
@@ -87,8 +87,8 @@ def unsupervised_HR_predict(config, data_loader, method_name, logger, log=True, 
 
 
             # added for sit
-            # subject_id, subject_part = filename.split('_')
-            # fps = fps_data[(fps_data['id']==subject_id) & (fps_data['part']==subject_part)]['fps'].item()
+            subject_id, subject_part = filename.split('_')
+            fps = fps_data[(fps_data['id']==subject_id) & (fps_data['part']==subject_part)]['fps'].item()
 
             index = test_batch[2]
             MAE_per_scenarios = dict()
@@ -357,6 +357,10 @@ def unsupervised_predict(config, data_loader, method_name, logger, log=True, sav
     dataframe['GT_HR'].plot.hist()
     logger.experiment.log_figure(figure=plt, figure_name="GT-Histogram")
     plt.close()
+
+    print(gt_hr_all)
+    print(predict_hr_all)
+    print(predictions_dict)
 
     metrics_calculations(gt_hr_all, predict_hr_all, SNR_all, config, logger)
 

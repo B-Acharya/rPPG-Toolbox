@@ -53,8 +53,14 @@ def extract_model_info(file_path):
         content = file.read()
 
     # Match the Result block
+    # match = re.search(
+    #     r"Result\(\n\s+metrics=\{(.*?)\},\n\s+path='(.*?)',",
+    #     content,
+        # re.DOTALL,
+    # )
+
     match = re.search(
-        r"Result\(\n\s+metrics=\{(.*?)\},\n\s+path='(.*?)',",
+        r"Result\(\n\s+error='RayTaskError\(ValueError\)',\n\s+metrics=\{(.*?)\},\n\s+path='(.*?)',",
         content,
         re.DOTALL,
     )
@@ -68,29 +74,27 @@ def extract_model_info(file_path):
         return None
 
 if __name__ == "__main__":
-    # model = "tscan"
+    log_paths = {
+            "tscan": "/homes/bacharya/rPPG-Toolbox/ray/ts-can/",
+            "physnet": "/homes/bacharya/rPPG-Toolbox/ray/vmc-mbp/"
+    }
+
+    log_patterns = {
+        ("tscan", "pseudo-ppg"): "early-stop_tscan_dropout-pseudo-*.log",
+        ("tscan", "ppg"): "early-stop_tscan_dropouto_*.log",
+        ("physnet", "pseudo-ppg"): "ea5ly-pseudo-physnet_*.log",
+        ("physnet", "ppg"): "early-physnet_*.log"
+    }
+
     model = "physnet"
-    experimetn_loss = "pseudo-ppg" #or "ppg"
-    # experimetn_loss = "ppg" #or "ppg"
+    # model = "physnet"
+    experimetn_loss = "ppg"
+    # experimetn_loss = "ppg"
+
+    basepath = pathlib.Path(log_paths[model])
+    log_files = sorted(basepath.rglob(log_patterns[(model, experimetn_loss)]))
+
     result_dict = {}
-
-    if model == "tscan":
-        basepath = pathlib.Path("/homes/bacharya/rPPG-Toolbox/ray/ts-can/")
-
-        if experimetn_loss == "pseudo-ppg":
-        # early-stopping-pseudo-labels:
-            log_files = sorted(list(basepath.rglob("early-stop_tscan_dropout-pseudo-*.log")))
-        elif experimetn_loss == "ppg":
-            log_files = sorted(list(basepath.rglob("early-stop_tscan_dropouto_*.log")))
-
-    elif model == "physnet":
-
-        basepath = pathlib.Path("/homes/bacharya/rPPG-Toolbox/ray/vmc-mbp/")
-        if experimetn_loss == "pseudo-ppg":
-            # early-stopping-pseudo-labels:
-            log_files = sorted(list(basepath.rglob("ea5ly-pseudo-physnet_*.log")))
-        elif experimetn_loss == "ppg":
-            log_files = sorted(list(basepath.rglob("early-physnet_*.log")))
 
     for log_file in log_files:
         print(log_file)

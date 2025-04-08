@@ -1,12 +1,12 @@
 BASE: ['']
-TOOLBOX_MODE: "RAY_LOO"      # "train_and_test"  or "only_test"
-FOLD: 3
+TOOLBOX_MODE: "RAY_LOO_TEST"      # "train_and_test"  or "only_test"
+FOLD: 1
 TRAIN:
   BATCH_SIZE: 4
   EPOCHS: 50
   LR: 1.0
   USE_LR_FINDER: False
-  MODEL_FILE_NAME: CMBP_CMBP_CMBP_TSCAN_RAY_LOO
+  MODEL_FILE_NAME: CMBP_CMBP_CMBP_TSCAN_RAY_MSE_EARLY
   DATA:
     FS: 25
     DATASET: CMBP
@@ -19,7 +19,6 @@ TRAIN:
     BEGIN: 0.0
     END: 1.0
     PREPROCESS:
-      USE_PSUEDO_PPG_LABEL: True
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       DATA_AUG: [ 'None' ]    # 'None' or 'Motion' is supported, used if the data path points to an augmented dataset or requires augmentation
       LABEL_TYPE: Standardized
@@ -37,38 +36,10 @@ TRAIN:
         H: 36
         W: 36
 
-VALID:
-  DATA:
-    FS: 25
-    DATASET: CMBP
-    DO_PREPROCESS: False # if first time, should be true
-    DATA_FORMAT: NDCHW
-    DATA_PATH: "/data/rppg_23_bi_video_nt_lab/data/"                     # Raw dataset path, need to be updated
-#    CACHED_PATH: "/data/rppg_23_bi_video_nt_lab/data_processed/"    # Processed dataset save path, need to be updated
-    CACHED_PATH: "/vol/rPPG/loss-functions/"    # Processed dataset save path, need to be updated
-    EXP_DATA_NAME: ""
-    BEGIN: 0.8
-    END: 0.9
-    PREPROCESS:
-      USE_PSUEDO_PPG_LABEL: False
-      DATA_TYPE: [ 'DiffNormalized','Standardized' ]
-      LABEL_TYPE: Standardized
-      DO_CHUNK: True
-      CHUNK_LENGTH: 1500
-      CROP_FACE:
-        DO_CROP_FACE: False
-        USE_LARGE_FACE_BOX: True
-        LARGE_BOX_COEF: 1.5
-        DETECTION:
-          DO_DYNAMIC_DETECTION: False
-          DYNAMIC_DETECTION_FREQUENCY : 30
-          USE_MEDIAN_FACE_BOX: False    # This should be used ONLY if dynamic detection is used
-      RESIZE:
-        H: 36
-        W: 36
 TEST:
   METRICS: ['MAE','RMSE','MAPE','Pearson','SNR']
   USE_LAST_EPOCH: False # to use provided validation dataset to find the best epoch, should be false
+  OUT_SAVE_DIR: "/vol/rPPG/loss-functions/Tscan/TorchTrainer_2024-12-31_01-58-35/4fa71d21_41_dropout_rate1=0.2000,dropout_rate2=0.1000,epochs=50,lr=0.0000,weight_decay=0.0010_41_dropout_rate1=0.2000,dropout_rate_2024-12-31_03-53-42"
   DATA:
     FS: 25
     DATASET: CMBP
@@ -81,7 +52,6 @@ TEST:
     BEGIN: 0.9
     END: 1.0
     PREPROCESS:
-      USE_PSUEDO_PPG_LABEL: False
       DATA_TYPE: [ 'DiffNormalized','Standardized' ]
       LABEL_TYPE: Standardized
       DO_CHUNK: True
@@ -99,11 +69,6 @@ TEST:
         W: 36
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
-EARLY_STOPPING:
-  PATIENCE: 10
-  DELTA: 0.001
-  TRAIN: False
-  VALID: True
 LOG:
   PATH: runs/exp
 MODEL:
@@ -121,4 +86,4 @@ MODEL:
 INFERENCE:
   BATCH_SIZE: 4
   EVALUATION_METHOD: "Welch"        # "FFT" or "peak detection"
-  MODEL_PATH:   ""
+  MODEL_PATH:   "/vol/rPPG/loss-functions/Tscan/TorchTrainer_2024-12-31_01-58-35/4fa71d21_41_dropout_rate1=0.2000,dropout_rate2=0.1000,epochs=50,lr=0.0000,weight_decay=0.0010_41_dropout_rate1=0.2000,dropout_rate_2024-12-31_03-53-42/checkpoint_000048/checkpoint.ckpt"
