@@ -12,9 +12,9 @@ import os
 from types import SimpleNamespace
 from config import get_config,_C
 import argparse
-
-from VAE_model_16 import RPPGVAE_16,VAE_16_Trainer,init_rppg_vae
-from simple_mmpd_loader import prepare_mmpd_dataloaders
+# from VAE_model_16 import RPPGVAE_16,VAE_16_Trainer,init_rppg_vae
+from VAE_model_16_DA import VAE_16_Trainer,init_rppg_vae
+from Improved_mmpd_loader import prepare_mmpd_dataloaders
 
 def prepare_data_for_vae(data, labels, device):
 
@@ -31,18 +31,18 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
     best_model_dir = "saved_models"
     os.makedirs(best_model_dir, exist_ok=True)
-    best_model_path = os.path.join(best_model_dir, "VAE16_best_model.pth")
+    best_model_path = os.path.join(best_model_dir, "VAE16_DA_best_model.pth")
 
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_{timestamp}")
+    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_DA_{timestamp}")
     writer = SummaryWriter(log_dir=log_dir)
     print(f"TensorBoard logs will be saved to {log_dir}")
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
-    patience = 50
+    patience = 30
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -58,8 +58,7 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
             pbar.set_postfix({
                 'loss': f"{losses['total_loss']:.2f}",
-                'bvp': f"{losses['bvp_loss']:.2f}",
-                'temp': f"{losses['bvp_temporal_loss']:.2f}",
+                'bvp': f"{losses['bvp_corr_loss']:.2f}"
             })
 
         avg_train_losses = {
@@ -70,9 +69,8 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
         writer.add_scalar('Loss/train/total', avg_train_losses["total_loss"], epoch)
         writer.add_scalar('Loss/train/bvp', avg_train_losses["bvp_loss"], epoch)
-        writer.add_scalar('Loss/train/bvp_temporal', avg_train_losses["bvp_temporal_loss"], epoch)
-        writer.add_scalar('Loss/train/frame', avg_train_losses["frame_loss"], epoch)
-        writer.add_scalar('Loss/train/kl', avg_train_losses["kl_loss"], epoch)
+        writer.add_scalar('Loss/train/bvp_corr', avg_train_losses["bvp_corr_loss"], epoch)
+
 
         if valid_loader is not None:
             model.eval()
@@ -92,13 +90,17 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
 
             writer.add_scalar('Loss/valid/total', avg_valid_losses["total_loss"], epoch)
-            writer.add_scalar('Loss/valid/bvp', avg_valid_losses["bvp_loss"], epoch)
-            writer.add_scalar('Loss/valid/bvp_temporal', avg_valid_losses["bvp_temporal_loss"], epoch)
-            writer.add_scalar('Loss/valid/frame', avg_valid_losses["frame_loss"], epoch)
-            writer.add_scalar('Loss/valid/kl', avg_valid_losses["kl_loss"], epoch)
+            writer.add_scalar('Loss/valid/bvp_corr', avg_valid_losses["bvp_corr_loss"], epoch)
 
 
-            best_combined_loss = avg_valid_losses['bvp_loss'] + avg_valid_losses['bvp_temporal_loss']
+
+            # best_loss = avg_valid_losses["bvp_temporal_loss"]
+            best_combined_loss = (
+                    0.5 * avg_valid_losses['bvp_loss'] +  # Reduced weight
+                    avg_valid_losses['bvp_temporal_loss'] +
+                    avg_valid_losses['bvp_freq_loss'] +
+                    avg_valid_losses['bvp_corr_loss']  # Full weight on correlation
+            )
             current_valid_loss = best_combined_loss
 
             if current_valid_loss < best_valid_loss:
@@ -125,16 +127,15 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
                 f'Epoch {epoch + 1}/{num_epochs} - '
                 f'Train Loss: {avg_train_losses["total_loss"]:.4f} - '
                 f'Valid Loss: {avg_valid_losses["total_loss"]:.4f} - '
-                f'BVP Loss: {avg_valid_losses["bvp_loss"]:.4f}'
-                f'BVP Temporal Loss: {avg_valid_losses["bvp_temporal_loss"]:.4f}'
+                f'BVP Temporal Loss: {avg_train_losses["bvp_temporal_loss"]:.4f} - '
+                f'BVP Corr Loss: {avg_valid_losses["bvp_corr_loss"]:.4f}'
             )
         else:
             patience_counter += 1
             logger.info(
                 f'Epoch {epoch + 1}/{num_epochs} - '
                 f'Train Loss: {avg_train_losses["total_loss"]:.4f} - '
-                f'BVP Loss: {avg_train_losses["bvp_loss"]:.4f}'
-                f'BVP Temporal Loss: {avg_train_losses["bvp_temporal_loss"]:.4f}'
+                f'BVP Corr Loss: {avg_train_losses["bvp_corr_loss"]:.4f}'
             )
 
 
