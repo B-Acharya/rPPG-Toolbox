@@ -1,33 +1,60 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 import numpy as np
 import scipy.io as sio
 from scipy import signal
 import glob
 import os
 import cv2 as cv
+from collections import defaultdict
+import random
 
 
 # This is the dataset class that loads the raw MMPD data directly from the .mat files with subject based splitting as it  is with the original MMPDdataloader. I didn't do the resising here but it will only take a couple of line changes.
 class ImprovedMMPDDataset(Dataset):
 
-    def __init__(self, data_path, frame_depth=16):
+    def __init__(self, data_path, frame_depth=64):
 
         self.frame_depth = frame_depth
         self.data_path = data_path
-
-
         self.mat_files = []
-        subject_dirs = sorted(glob.glob(os.path.join(data_path, 'subject*')))
-        for subject_dir in subject_dirs:
-            subject_files = glob.glob(os.path.join(subject_dir, '*.mat'))
-            self.mat_files.extend(subject_files)
+        # check which mat file belongs to which subject
+        self.file_to_subject = {}
 
-        print(f"Found {len(self.mat_files)} samples from {len(subject_dirs)} subjects")
+        # Finding all subject directories
+        all_subject_items = glob.glob(os.path.join(self.data_path, 'subject*'))
+        subject_dirs = [item for item in all_subject_items if os.path.isdir(item)]
+        subject_dirs = sorted(subject_dirs)
+
+        print(len(subject_dirs))
+        # need all the files for a specific subject
+        self.subject_to_files = defaultdict(list)
+
+        for subject_dir in subject_dirs:
+            subject_name = os.path.basename(subject_dir)
+            subject_files = glob.glob(os.path.join(subject_dir, '*.mat'))
+
+            if subject_files:
+                for file_path in subject_files:
+                    self.mat_files.append(file_path)
+                    self.file_to_subject[file_path] = subject_name
+                    self.subject_to_files[subject_name].append(file_path)
+
+        self.subjects = list(self.subject_to_files.keys())
+
+        print(f"Found {len(self.subjects)} subjects with data")
+        print(f"Total {len(self.mat_files)} .mat files")
 
     def __len__(self):
         return len(self.mat_files)
 
+    def get_subjects(self):
+        ## Return the list of all subjects
+        return self.subjects
+
+    def get_subject_for_idx(self, idx):
+        ##  subject ID for a given sample index
+        return self.file_to_subject[self.mat_files[idx]]
 
     def preprocess_frames(self, frames):
 
@@ -72,10 +99,15 @@ class ImprovedMMPDDataset(Dataset):
         except:
             bvp_filter = bvp_detrended
 
+        mean_val = np.mean(bvp_filter)
+        std_val = np.std(bvp_filter)
         # Fix the normalization
-        bvp_normalised = (bvp_filter - np.mean(bvp_filter)) / (np.std(bvp_filter) + 1e-8)
+        if std_val > 0:
+            bvp_normalized = (bvp_filter - mean_val) / (std_val + 1e-8)
+        else:
+            bvp_normalized = bvp_filter - mean_val
 
-        return bvp_normalised
+        return bvp_normalized
 
     def __getitem__(self, idx):
         try:
@@ -97,13 +129,6 @@ class ImprovedMMPDDataset(Dataset):
                 frames = frames[:self.frame_depth]
                 bvp = bvp[:self.frame_depth]
 
-            # Consistent normalization
-            frames = frames.astype(np.float32)
-
-            # Ensure frames are in [0, 255] range first
-            if frames.max() <= 1.0:
-                frames = frames * 255.0
-
             # Apply preprocessing (CLAHE enhancement)
             frames = self.preprocess_frames(frames)
 
@@ -124,27 +149,69 @@ class ImprovedMMPDDataset(Dataset):
             bvp = torch.zeros(self.frame_depth)
             return frames, bvp
 
-def prepare_mmpd_dataloaders(config):
 
-    full_dataset = ImprovedMMPDDataset(data_path=config.TRAIN.DATA.DATA_PATH, frame_depth=config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH)
+def create_subject_split_indices(dataset, train_ratio=0.8, random_seed=42):
 
-    total_samples = len(full_dataset)
-    train_size = int(total_samples * 0.8)
-    test_size = total_samples - train_size
+    all_subjects = dataset.get_subjects()
+    n_subjects = len(all_subjects)
+    n_train_subjects = int(n_subjects * train_ratio)
 
-    print(f"Total samples: {total_samples}")
-    print(f"Train samples: {train_size}({train_size/total_samples:.1%})")
-    print(f"Test samples: {test_size}({test_size/total_samples:.1%})")
+    random.seed(random_seed)
+    subjects_shuffled = all_subjects.copy()
+    random.shuffle(subjects_shuffled)
+
+    train_subjects = set(subjects_shuffled[:n_train_subjects])
+    test_subjects = set(subjects_shuffled[n_train_subjects:])
+
+    train_indices = []
+    test_indices = []
+
+    for idx in range(len(dataset)):
+        subject = dataset.get_subject_for_idx(idx)
+        if subject in train_subjects:
+            train_indices.append(idx)
+        else:
+            test_indices.append(idx)
 
 
+    return train_indices, test_indices
 
-    train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
 
-    print(f"Actual train_dataset size: {len(train_dataset)}")
-    print(f"Actual test_dataset size: {len(test_dataset)}")
+def prepare_mmpd_dataloaders(config, frame_depth=16, train_ratio=0.8, random_seed=42):
 
-    train_loader = DataLoader(train_dataset, batch_size=config.TRAIN.BATCH_SIZE, shuffle=True, num_workers=4,pin_memory=True)
 
-    test_loader = DataLoader(test_dataset,batch_size=config.INFERENCE.BATCH_SIZE, shuffle=False, num_workers=4,pin_memory=True)
+    full_dataset = ImprovedMMPDDataset(
+        data_path=config.TRAIN.DATA.DATA_PATH,
+        frame_depth=frame_depth
+    )
+
+
+    train_indices, test_indices = create_subject_split_indices(
+        full_dataset,
+        train_ratio=train_ratio,
+        random_seed=random_seed
+    )
+
+
+    train_dataset = Subset(full_dataset, train_indices)
+    test_dataset = Subset(full_dataset, test_indices)
+
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.TRAIN.BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config.INFERENCE.BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
 
     return train_loader, test_loader
