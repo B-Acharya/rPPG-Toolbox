@@ -8,52 +8,35 @@ class BVP_Decoder(nn.Module):
     def __init__(self, latent_dim, seq_len=64):
         super().__init__()
 
-        self.input_proj = nn.Sequential(
-            nn.Linear(latent_dim, 64),
-            nn.LayerNorm(64),
+        self.expand = nn.Sequential(
+            nn.Linear(latent_dim, 16),
+            nn.LayerNorm(16),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(16, 32),
+            nn.LayerNorm(32),
             nn.GELU()
         )
 
-        self.conv_short = nn.Conv1d(64,24, kernel_size=5, padding=2)
-        self.conv_medium = nn.Conv1d(64,24, kernel_size=11, padding=5)
-        self.conv_long = nn.Conv1d(64,24, kernel_size=21, padding=10)
-
-        self.scale_weights = nn.Parameter(torch.ones(3)/3)
-
-        self.output = nn.Sequential(
-            nn.Conv1d(72, 48, kernel_size=5, padding=2),
-            nn.BatchNorm1d(48),
+        self.temporal = nn.Sequential(
+            nn.Conv1d(32,16, kernel_size=5,padding=2),
+            nn.BatchNorm1d(16),
             nn.GELU(),
-            nn.Dropout1d(0.1),
-            nn.Conv1d(48, 1, kernel_size=1)
+            nn.Conv1d(16, 1, kernel_size=3,padding=1),
+            nn.Tanh()
         )
 
-        self.residual = nn.Linear(latent_dim, 1)
-
-    def forward(self, z):
-        x = self.input_proj(z).transpose(1, 2)
-
-        scales = [
-            F.gelu(self.conv_short(x)),
-            F.gelu(self.conv_medium(x)),
-            F.gelu(self.conv_long(x))
-        ]
-
-        weights = F.softmax(self.scale_weights, dim=0)
-        combined = torch.cat([s*w for s,w in zip(scales, weights)], dim=1)
-        output = self.output(combined)
-
-        output = output.squeeze(1)
-        residual = self.residual(z).squeeze(-1)*0.1
-
-        return output + residual
-
+    def forward(self, x):
+        x = self.expand(x)
+        x = x.transpose(1,2)
+        output = self.temporal(x)
+        return output.squeeze(1)
 
 
 
 class RPPGVAE_64(nn.Module):
 
-    def __init__(self, frame_depth = 64, latent_dim=64, hidden_dims = 2048, input_height = 80, input_width = 60, beta = 4.0):
+    def __init__(self, frame_depth = 64, latent_dim=4, hidden_dims = 512, input_height = 80, input_width = 60, beta = 4.0):
         super(RPPGVAE_64, self).__init__()
         self.frame_depth = frame_depth
         self.latent_dim = latent_dim
@@ -66,23 +49,24 @@ class RPPGVAE_64(nn.Module):
         # change it if you change the stride
         self.spatial_h = input_height // 4
         self.spatial_w = input_width // 4
-        self.spatial_channels = 128
+        self.spatial_channels = 32
         self.spatial_features_dim = self.spatial_channels*self.spatial_h*self.spatial_w
 
         self.spatial_encoder = nn.Sequential(
-            nn.Conv3d(3,32,(1,3,3),padding=(0,1,1)),
-            nn.BatchNorm3d(32),
+            nn.Conv3d(3,16,(1,3,3),padding=(0,1,1)),
+            nn.BatchNorm3d(16),
             nn.ReLU(),
-            nn.Conv3d(32,64,(1,3,3),padding=(0,1,1)),
-            nn.BatchNorm3d(64),
+            nn.Conv3d(16,32,(1,3,3),padding=(0,1,1)),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
             nn.MaxPool3d((1,2,2), stride=(1,2,2)),
 
-            nn.Conv3d(64,self.spatial_channels,(1,3,3),padding=(0,1,1)),
+            nn.Conv3d(32,self.spatial_channels,(1,3,3),padding=(0,1,1)),
             nn.BatchNorm3d(self.spatial_channels),
             nn.ReLU(),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2))
         )
+
         self.temporal_encoder = nn.Sequential(
             nn.Conv3d(self.spatial_channels, self.spatial_channels, kernel_size=(3, 1, 1), padding=(1, 0, 0)),
             nn.BatchNorm3d(self.spatial_channels),
@@ -92,32 +76,48 @@ class RPPGVAE_64(nn.Module):
             nn.ReLU(),
             nn.Conv3d(self.spatial_channels, self.spatial_channels, kernel_size=(7, 1, 1), padding=(3, 0, 0)),
             nn.BatchNorm3d(self.spatial_channels),
-            nn.ReLU(),
-            nn.Conv3d(self.spatial_channels, self.spatial_channels,kernel_size=(11, 1, 1), padding=(5, 0, 0)),
-            nn.BatchNorm3d(self.spatial_channels),
             nn.ReLU()
+            # nn.Conv3d(self.spatial_channels, self.spatial_channels,kernel_size=(11, 1, 1), padding=(5, 0, 0)),
+            # nn.BatchNorm3d(self.spatial_channels),
+            # nn.ReLU()
         )
 
         self.frame_flatten = nn.Flatten(2,4)
 
 
+        # self.fc_frame = nn.Sequential(
+        #     nn.Linear(self.spatial_features_dim, self.hidden_dims),
+        #     nn.BatchNorm1d(self.hidden_dims),
+        #     nn.GELU(),
+        #     nn.Dropout(0.4),
+        #
+        #     nn.Linear(self.hidden_dims, self.hidden_dims//4),
+        #     nn.BatchNorm1d(self.hidden_dims//4),
+        #     nn.GELU(),
+        #     nn.Dropout(0.3),
+        #
+        #     nn.Linear(self.hidden_dims//4,self.hidden_dims//16),
+        #     nn.BatchNorm1d(self.hidden_dims//16),
+        #     nn.GELU()
+        # )
+
         self.fc_frame = nn.Sequential(
-            nn.Linear(self.spatial_features_dim, self.hidden_dims),
-            nn.BatchNorm1d(self.hidden_dims),
+            nn.Linear(self.spatial_features_dim, 512),
+            nn.BatchNorm1d(512),
+            nn.GELU(),
+            nn.Dropout(0.5),
+
+            nn.Linear(512,128),
+            nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Dropout(0.4),
 
-            nn.Linear(self.hidden_dims, self.hidden_dims//4),
-            nn.BatchNorm1d(self.hidden_dims//4),
-            nn.GELU(),
-            nn.Dropout(0.3),
-
-            nn.Linear(self.hidden_dims//4,self.hidden_dims//16),
-            nn.BatchNorm1d(self.hidden_dims//16),
+            nn.Linear(128,32),
+            nn.BatchNorm1d(32),
             nn.GELU()
         )
 
-        self.final_hidden_dim = self.hidden_dims//16
+        self.final_hidden_dim = 32
 
         self.fc_mu = nn.Linear(self.final_hidden_dim, latent_dim)
         self.fc_logvar = nn.Linear(self.final_hidden_dim, latent_dim)
@@ -142,17 +142,17 @@ class RPPGVAE_64(nn.Module):
 
 
         self.spatial_decoder = nn.Sequential(
-            nn.ConvTranspose3d(self.spatial_channels, 64, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.BatchNorm3d(64),
+            nn.ConvTranspose3d(self.spatial_channels, 32, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
             nn.Upsample(scale_factor=(1, 2, 2)),
 
-            nn.ConvTranspose3d(64, 32, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.BatchNorm3d(32),
+            nn.ConvTranspose3d(32, 16, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.BatchNorm3d(16),
             nn.GELU(),
             nn.Upsample(scale_factor=(1, 2, 2)),
 
-            nn.ConvTranspose3d(32, 3, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.ConvTranspose3d(16, 3, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
         )
 
 
@@ -272,12 +272,7 @@ class VAE_64_Trainer:
             {'params': model.fc_logvar.parameters(), 'lr': config.TRAIN.LR * 0.5},
         ], lr=config.TRAIN.LR, weight_decay=1e-5)
 
-        # self.optimizer = torch.optim.AdamW([
-        #     {'params': self.model.spatial_encoder.parameters()},
-        #     {'params': self.model.temporal_encoder.parameters()},
-        #     {'params': self.model.frame_decoder_fc.parameters()},
-        #     {'params': self.model.bvp_decoder.parameters(), 'weight_decay': 1e-3}  # Higher for temporal decoder
-        # ], lr=config.TRAIN.LR, weight_decay=1e-5)
+
 
 
 
@@ -316,14 +311,19 @@ class VAE_64_Trainer:
         target_centered = target - target_mean
 
         numerator = (pred_centered * target_centered).sum(dim=1)
-        denominator = torch.sqrt((pred_centered**2).sum(dim=1) + (target_centered**2).sum(dim=1))
+        pred_norm = torch.sqrt((pred_centered ** 2).sum(dim=1) + 1e-8)
+        target_norm = torch.sqrt((target_centered ** 2).sum(dim=1) + 1e-8)
 
-        correlation = numerator / (denominator + 1e-8)
-        return (1-correlation).mean()
+        correlation = numerator / (pred_norm * target_norm)
+
+        correlation = torch.clamp(correlation, -1.0, 1.0)
+
+
+        return (1 - correlation).mean()
 
     def compute_kl_loss_with_free_bits(self, mu, logvar):
 
-        kl_per_dim = -0.5 * (1+ + logvar - mu.pow(2) - logvar.exp())
+        kl_per_dim = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
 
         kl_per_dim = torch.maximum(kl_per_dim, torch.tensor(self.model.free_bits).to(self.device))
 
@@ -337,8 +337,6 @@ class VAE_64_Trainer:
 
         frame_l1 = F.l1_loss(frames_recon, frames)
         frame_loss = 0.7 * frame_mse + 0.3 * frame_l1
-
-
 
         bvp_mse = F.mse_loss(bvp_recon, bvp, reduction='mean')
         bvp_corr_loss = self.pearson_correlation_loss(bvp_recon, bvp)
@@ -357,22 +355,22 @@ class VAE_64_Trainer:
 
         if self.current_epoch < 10:
             # Early: Focus on BVP but maintain minimum frame reconstruction
-            frame_weight = 0.15  # Not too low - need spatial awareness
-            bvp_mse_weight = 0.5
-            bvp_corr_weight = 1.0  # Primary focus
-            bvp_temporal_weight = 0.5
+            frame_weight = 0.2  # Not too low - need spatial awareness
+            bvp_mse_weight = 0.4
+            bvp_corr_weight = 0.8  # Primary focus
+            bvp_temporal_weight = 0.4
         elif self.current_epoch < 30:
             # Middle: Gradual transition
             progress = (self.current_epoch - 10) / 20
-            frame_weight = 0.15 + 0.15 * progress  # 0.15 → 0.3
-            bvp_mse_weight = 0.5 - 0.2 * progress  # 0.5 → 0.3
-            bvp_corr_weight = 1.0 - 0.2 * progress  # 1.0 → 0.8
-            bvp_temporal_weight = 0.5 - 0.2 * progress  # 0.5 → 0.3
+            frame_weight = 0.2 + 0.1 * progress  # 0.15 → 0.3
+            bvp_mse_weight = 0.4 - 0.1 * progress  # 0.5 → 0.3
+            bvp_corr_weight = 0.8 - 0.2 * progress  # 1.0 → 0.8
+            bvp_temporal_weight = 0.4 - 0.1 * progress  # 0.5 → 0.3
         else:
             # Later: Balanced approach
             frame_weight = 0.3
             bvp_mse_weight = 0.3
-            bvp_corr_weight = 0.8
+            bvp_corr_weight = 0.6
             bvp_temporal_weight = 0.3
 
             # KL weight from cyclical beta
@@ -436,8 +434,8 @@ def init_rppg_vae():
 
     model = RPPGVAE_64(
         frame_depth=64,
-        latent_dim=16,
-        hidden_dims=2048,
+        latent_dim=4,
+        hidden_dims=512,
         input_height=80,
         input_width=60
     )
