@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from config import get_config,_C
 import argparse
 # from VAE_model_16 import RPPGVAE_16,VAE_16_Trainer,init_rppg_vae
-from VAE_model_16_DA import VAE_16_Trainer,init_rppg_vae
+from VAE_model_16_E import VAE_64_Trainer,init_rppg_vae
 from Improved_mmpd_loader import prepare_mmpd_dataloaders
 
 def prepare_data_for_vae(data, labels, device):
@@ -24,18 +24,18 @@ def prepare_data_for_vae(data, labels, device):
 def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'):
 
 
-    trainer = VAE_16_Trainer(model, config, device)
+    trainer = VAE_64_Trainer(model, config, device)
     num_epochs = config.TRAIN.EPOCHS
     best_valid_loss = float('inf')
 
 
     best_model_dir = "saved_models"
     os.makedirs(best_model_dir, exist_ok=True)
-    best_model_path = os.path.join(best_model_dir, "VAE16_DA_best_model.pth")
+    best_model_path = os.path.join(best_model_dir, "VAE64_best_model_New_2.pth")
 
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_DA_{timestamp}")
+    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_64_New_2_{timestamp}")
     writer = SummaryWriter(log_dir=log_dir)
     print(f"TensorBoard logs will be saved to {log_dir}")
 
@@ -96,10 +96,9 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
             # best_loss = avg_valid_losses["bvp_temporal_loss"]
             best_combined_loss = (
-                    0.5 * avg_valid_losses['bvp_loss'] +  # Reduced weight
+                    # 0.5 * avg_valid_losses['bvp_loss'] +  # Reduced weight
                     avg_valid_losses['bvp_temporal_loss'] +
-                    avg_valid_losses['bvp_freq_loss'] +
-                    avg_valid_losses['bvp_corr_loss']  # Full weight on correlation
+                  avg_valid_losses['bvp_corr_loss']
             )
             current_valid_loss = best_combined_loss
 
@@ -127,7 +126,7 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
                 f'Epoch {epoch + 1}/{num_epochs} - '
                 f'Train Loss: {avg_train_losses["total_loss"]:.4f} - '
                 f'Valid Loss: {avg_valid_losses["total_loss"]:.4f} - '
-                f'BVP Temporal Loss: {avg_train_losses["bvp_temporal_loss"]:.4f} - '
+                f'BVP Temporal Loss: {avg_valid_losses["bvp_temporal_loss"]:.4f} - '
                 f'BVP Corr Loss: {avg_valid_losses["bvp_corr_loss"]:.4f}'
             )
         else:
