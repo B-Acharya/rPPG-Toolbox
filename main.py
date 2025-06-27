@@ -14,6 +14,7 @@ from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from torch.utils.data import DataLoader
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+import comet_ml
 from lightning.pytorch.loggers import CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch.strategies import DDPStrategy
@@ -343,13 +344,16 @@ def test(config, data_loader_dict):
         raise ValueError('Your Model is Not Supported  Yet!')
     # model_trainer.test(data_loader_dict)
 
-    comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                               # project_name="Strat-exp1",
-                               project_name="Exp3-cmbp-on-public-Start2",
-                               workspace="b-acharya",
-                               experiment_name= f"{config.MODEL.NAME}_{config.TEST.DATA.DATASET}_{config.TRAIN.MODEL_FILE_NAME}",
-                               log_code=True
-                               )
+    comet_ml.login()
+    comet_logger = CometLogger(
+        project_name="Exp3-cmbp-on-public-Start2",
+        workspace="b-acharya",
+        experiment_name= f"{config.MODEL.NAME}_{config.TEST.DATA.DATASET}_{config.TRAIN.MODEL_FILE_NAME}",
+        log_code=False,
+        log_env_details=False,
+        log_env_gpu=False,
+        log_env_cpu=False,
+    )
     hyper_parameters = {
         "learning_rate": config.TRAIN.LR,
         "epochs": config.TRAIN.EPOCHS
@@ -374,12 +378,14 @@ def unsupervised_method_inference(config, data_loader):
         raise ValueError("Please set unsupervised method in yaml!")
     for unsupervised_method in config.UNSUPERVISED.METHOD:
         run_name = unsupervised_method
-        comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                   #project_name="unsupervised-methods",
-                                   project_name="DST-dataset-unsupervised",
+        comet_ml.login()
+        comet_logger = CometLogger(project_name="exp1",
                                    workspace="b-acharya",
                                    experiment_name=f"{run_name}",
-                                   log_code=False
+                                   log_code=False,
+                                   log_env_details=False,
+                                   log_env_gpu=False,
+                                   log_env_cpu=False,
                                    )
         comet_logger.experiment.add_tag(f"{config.UNSUPERVISED.DATA.DATASET}")
         comet_logger.experiment.add_tag(f"{config.INFERENCE.EVALUATION_METHOD}")
@@ -787,33 +793,20 @@ if __name__ == "__main__":
                 config.TEST.DATA.DO_PREPROCESS = False
                 config.freeze()
 
-                comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                           project_name="loss-functions",
-                                           workspace="b-acharya",
-                                           #experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-                                           experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{test_i}_valid_{valid_j}",
-                                           log_code=True
-                                           )
+                comet_ml.login()
+                comet_logger = CometLogger(
+                    project_name="loss-functions",
+                    workspace="b-acharya",
+                    experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_FOLD_{test_i}_valid_{valid_j}",
+                    log_code=False,
+                    log_env_details=False,
+                    log_env_gpu=False,
+                    log_env_cpu=False,
+                )
                 hyper_parameters = {
                         "Learning_rate": config.TRAIN.LR,
                         "epochs": config.TRAIN.EPOCHS
                 }
-
-            # elif config.TOOLBOX_MODE == "LOO_test":
-            #
-            #     comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-            #                                    project_name="Exp1-Leave-One-Out-Welch",
-            #                                    workspace="b-acharya",
-            #                                    experiment_name= f"{config.MODEL.NAME}_{config.TRAIN.DATA.DATASET}_{config.VALID.DATA.DATASET}_{config.TEST.DATA.DATASET}",
-                                               # experiment_name= f"{config.TRAIN.DATA.DATASET}_{config.MODEL.NAME}_LOO__FOLD_{i}",
-                                               # log_code=True
-                                               # )
-                # hyper_parameters = {
-                #         "Learning_rate": config.TRAIN.LR,
-                #         "epochs": config.TRAIN.EPOCHS
-                # }
-            # else:
-            #     raise NotImplementedError
 
                 comet_logger.log_hyperparams(hyper_parameters)
                 comet_logger.experiment.add_tags(
@@ -946,16 +939,16 @@ if __name__ == "__main__":
         raise ValueError("Unsupported toolbox_mode! Currently support train_and_test or only_test or unsupervised_method.")
 
     if config.TOOLBOX_MODE == "train_and_test" or config.TOOLBOX_MODE == "train_and_test_enrich":
-
-        comet_logger = CometLogger(api_key="V1x7OI9PoIRM8yze4prM2FPcE",
-                                   # project_name="Exp3-cmbp-on-public-Start2",
-                                   # project_name="pure_vipl_dst_tscan",
-                                   project_name="Physnet-loss-funciton-analysis",
-                                   # project_name="Exp2-public-on-CMBP-start2",
-                                   workspace="b-acharya",
-                                   experiment_name=f"{config.TRAIN.DATA.DATASET}_{config.TEST.DATA.DATASET}_{config.MODEL.NAME}",
-                                   log_code=True
-                                   )
+        comet_ml.login()
+        comet_logger = CometLogger(
+            project_name="Physnet-loss-funciton-analysis",
+            workspace="b-acharya",
+            experiment_name=f"{config.TRAIN.DATA.DATASET}_{config.TEST.DATA.DATASET}_{config.MODEL.NAME}",
+            log_code=False,
+            log_env_details=False,
+            log_env_gpu=False,
+            log_env_cpu=False,
+        )
         hyper_parameters = {
             "Learning_rate": config.TRAIN.LR,
             "epochs": config.TRAIN.EPOCHS
