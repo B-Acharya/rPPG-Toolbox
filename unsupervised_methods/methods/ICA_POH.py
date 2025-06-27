@@ -3,12 +3,13 @@ Non-contact, automated cardiac pulse measurements using video imaging and blind 
 Poh, M. Z., McDuff, D. J., & Picard, R. W. (2010).
 Optics express, 18(10), 10762-10774. DOI: 10.1364/OE.18.010762
 """
+
 import math
 
 import numpy as np
 from scipy import linalg
 from scipy import signal
-from unsupervised_methods import utils
+import rPPG_Toolbox.unsupervised_methods.utils as utils
 
 
 def ICA_POH(frames, FS):
@@ -33,14 +34,14 @@ def ICA_POH(frames, FS):
         FF = FF[:, 1:]
         FF = FF[0]
         N = FF.shape[0]
-        Px = np.abs(FF[:math.floor(N / 2)])
+        Px = np.abs(FF[: math.floor(N / 2)])
         Px = np.multiply(Px, Px)
         Fx = np.arange(0, N / 2) / (N / 2) * NyquistF
         Px = Px / np.sum(Px, axis=0)
         MaxPx[0, c] = np.max(Px)
     MaxComp = np.argmax(MaxPx)
     BVP_I = S[MaxComp, :]
-    B, A = signal.butter(3, [LPF / NyquistF, HPF / NyquistF], 'bandpass')
+    B, A = signal.butter(3, [LPF / NyquistF, HPF / NyquistF], "bandpass")
     BVP_F = signal.filtfilt(B, A, np.real(BVP_I).astype(np.double))
 
     BVP = BVP_F[0]
@@ -61,14 +62,19 @@ def ica(X, Nsources, Wprev=0):
     nCols = X.shape[1]
     if nRows > nCols:
         print(
-            "Warning - The number of rows is cannot be greater than the number of columns.")
+            "Warning - The number of rows is cannot be greater than the number of columns."
+        )
         print("Please transpose input.")
 
     if Nsources > min(nRows, nCols):
         Nsources = min(nRows, nCols)
         print(
-            'Warning - The number of soures cannot exceed number of observation channels.')
-        print('The number of sources will be reduced to the number of observation channels ', Nsources)
+            "Warning - The number of soures cannot exceed number of observation channels."
+        )
+        print(
+            "The number of sources will be reduced to the number of observation channels ",
+            Nsources,
+        )
 
     Winv, Zhat = jade(X, Nsources, Wprev)
     W = np.linalg.pinv(Winv)
@@ -85,10 +91,10 @@ def jade(X, m, Wprev):
         Diag = D
         k = np.argsort(Diag)
         pu = Diag[k]
-        ibl = np.sqrt(pu[n - m:n] - np.mean(pu[0:n - m]))
+        ibl = np.sqrt(pu[n - m : n] - np.mean(pu[0 : n - m]))
         bl = np.true_divide(np.ones(m, 1), ibl)
-        W = np.matmul(np.diag(bl), np.transpose(U[0:n, k[n - m:n]]))
-        IW = np.matmul(U[0:n, k[n - m:n]], np.diag(ibl))
+        W = np.matmul(np.diag(bl), np.transpose(U[0:n, k[n - m : n]]))
+        IW = np.matmul(U[0:n, k[n - m : n]], np.diag(ibl))
     else:
         IW = linalg.sqrtm(np.matmul(X, X.H) / T)
         W = np.linalg.inv(IW)
@@ -106,8 +112,12 @@ def jade(X, m, Wprev):
             for jx in range(m):
                 Yjk1 = np.multiply(Yk1, np.conj(Y[jx, :]))
                 for ix in range(m):
-                    Q[index] = np.matmul(Yjk1 / math.sqrt(T), Y[ix, :].T / math.sqrt(
-                        T)) - R[ix, jx] * R[lx, kx] - R[ix, kx] * R[lx, jx] - C[ix, lx] * np.conj(C[jx, kx])
+                    Q[index] = (
+                        np.matmul(Yjk1 / math.sqrt(T), Y[ix, :].T / math.sqrt(T))
+                        - R[ix, jx] * R[lx, kx]
+                        - R[ix, kx] * R[lx, jx]
+                        - C[ix, lx] * np.conj(C[jx, kx])
+                    )
                     index += 1
     # Compute and Reshape the significant Eigen
     D, U = np.linalg.eig(Q.reshape(m * m, m * m))
@@ -119,7 +129,7 @@ def jade(X, m, Wprev):
     h = m * m - 1
     for u in range(0, nem * m, m):
         Z = U[:, K[h]].reshape((m, m))
-        M[:, u:u + m] = la[h] * Z
+        M[:, u : u + m] = la[h] * Z
         h = h - 1
     # Approximate the Diagonalization of the Eigen Matrices:
     B = np.array([[1, 0, 0], [0, 1, 1], [0, 0 - 1j, 0 + 1j]])

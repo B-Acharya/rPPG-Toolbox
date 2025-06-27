@@ -6,17 +6,15 @@ Stricker, R., Müller, S., Gross, H.-M.
 Non-contact Video-based Pulse Rate Measurement on a Mobile Service Robot
 in: Proc. 23st IEEE Int. Symposium on Robot and Human Interactive Communication (Ro-Man 2014), Edinburgh, Scotland, UK, pp. 1056 - 1062, IEEE 2014
 """
-import glob
+
 import glob
 import json
 import os
 import random
-import re
 
 import cv2
 import numpy as np
-from dataset.data_loader.BaseLoader import BaseLoader
-from tqdm import tqdm
+from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
 
 class PURELoader(BaseLoader):
@@ -26,25 +24,26 @@ class PURELoader(BaseLoader):
 
     def __init__(self, name, data_path, config_data, model):
         """Initializes an PURE dataloader.
-            Args:
-                data_path(str): path of a folder which stores raw video and bvp data.
-                e.g. data_path should be "RawData" for below dataset structure:
-                -----------------
-                     RawData/
-                     |   |-- 01-01/
-                     |      |-- 01-01/
-                     |      |-- 01-01.json
-                     |   |-- 01-02/
-                     |      |-- 01-02/
-                     |      |-- 01-02.json
-                     |...
-                     |   |-- ii-jj/
-                     |      |-- ii-jj/
-                     |      |-- ii-jj.json
-                -----------------
-                name(str): name of the dataloader.
-                config_data(CfgNode): data settings(ref:config.py).
+        Args:
+            data_path(str): path of a folder which stores raw video and bvp data.
+            e.g. data_path should be "RawData" for below dataset structure:
+            -----------------
+                 RawData/
+                 |   |-- 01-01/
+                 |      |-- 01-01/
+                 |      |-- 01-01.json
+                 |   |-- 01-02/
+                 |      |-- 01-02/
+                 |      |-- 01-02.json
+                 |...
+                 |   |-- ii-jj/
+                 |      |-- ii-jj/
+                 |      |-- ii-jj.json
+            -----------------
+            name(str): name of the dataloader.
+            config_data(CfgNode): data settings(ref:config.py).
         """
+        print("Loading pure dataset...")
         super().__init__(name, data_path, config_data, model)
         self.num_of_participants = 10
 
@@ -63,7 +62,7 @@ class PURELoader(BaseLoader):
             pass
         dirs = list()
         for data_dir in data_dirs:
-            subject_trail_val = os.path.split(data_dir)[-1].replace('-', '')
+            subject_trail_val = os.path.split(data_dir)[-1].replace("-", "")
             index = int(subject_trail_val)
             subject = int(subject_trail_val[0:2])
             dirs.append({"index": index, "path": data_dir, "subject": subject})
@@ -80,14 +79,16 @@ class PURELoader(BaseLoader):
         # get info about the dataset: subject list and num vids per subject
         data_info = dict()
         for data in data_dirs:
-            subject = data['subject']
-            data_dir = data['path']
-            index = data['index']
+            subject = data["subject"]
+            data_dir = data["path"]
+            index = data["index"]
             # creates a dictionary of data_dirs indexed by subject number
             if subject not in data_info:  # if subject not in the data info dictionary
                 data_info[subject] = []  # make an emplty list for that subject
             # append a tuple of the filename, subject num, trial num, and chunk num
-            data_info[subject].append({"index": index, "path": data_dir, "subject": subject})
+            data_info[subject].append(
+                {"index": index, "path": data_dir, "subject": subject}
+            )
 
         subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
         subj_list = sorted(subj_list)
@@ -117,34 +118,38 @@ class PURELoader(BaseLoader):
     def split_raw_data_loo(self, data_dirs, participant_ids):
         data_dirs_new = list()
         for data_dir in data_dirs:
-            if data_dir['subject'] in participant_ids:
+            if data_dir["subject"] in participant_ids:
                 data_dirs_new.append(data_dir)
         return data_dirs_new
 
-    def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
-        """ Invoked by preprocess_dataset for multi_process. """
-        filename = os.path.split(data_dirs[i]['path'])[-1]
-        saved_filename = data_dirs[i]['index']
-        print('start with pre-process')
+    def preprocess_dataset_subprocess(
+        self, data_dirs, config_preprocess, i, file_list_dict
+    ):
+        """Invoked by preprocess_dataset for multi_process."""
+        filename = os.path.split(data_dirs[i]["path"])[-1]
+        saved_filename = data_dirs[i]["index"]
+        print("start with pre-process")
 
-        if 'None' in config_preprocess.DATA_AUG:
-            print('reading video')
+        if "None" in config_preprocess.DATA_AUG:
+            print("reading video")
             # Utilize dataset-specific function to read video
-            frames = self.read_video(
-                os.path.join(data_dirs[i]['path'], ""))
-            print('done reading video')
-        elif 'Motion' in config_preprocess.DATA_AUG:
+            frames = self.read_video(os.path.join(data_dirs[i]["path"], ""))
+            print("done reading video")
+        elif "Motion" in config_preprocess.DATA_AUG:
             # Utilize general function to read video in .npy format
             frames = self.read_npy_video(
-                glob.glob(os.path.join(data_dirs[i]['path'], filename, '*.npy')))
+                glob.glob(os.path.join(data_dirs[i]["path"], filename, "*.npy"))
+            )
         else:
-            raise ValueError(f'Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}.')
-
+            raise ValueError(
+                f"Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}."
+            )
 
         # bvps = self.read_wave(
         #     os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
         bvps = self.read_wave(
-            os.path.join(self.raw_data_path, "{0}.json".format(filename)))
+            os.path.join(self.raw_data_path, "{0}.json".format(filename))
+        )
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
         # if config_preprocess.TRIM:
@@ -152,17 +157,19 @@ class PURELoader(BaseLoader):
         #     bvps = bvps[:1800]
         print("entering self.preprocess")
         frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        print('done with pre-process')
+        print("done with pre-process")
 
-        input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
+        input_name_list, label_name_list = self.save_multi_process(
+            frames_clips, bvps_clips, saved_filename
+        )
         file_list_dict[i] = input_name_list
-        print('exit pre-process')
+        print("exit pre-process")
 
     @staticmethod
     def read_video(video_file):
-        """Reads a video file, returns frames(T, H, W, 3) """
+        """Reads a video file, returns frames(T, H, W, 3)"""
         frames = list()
-        all_png = sorted(glob.glob(video_file + '*.png'))
+        all_png = sorted(glob.glob(video_file + "*.png"))
         for png_path in all_png:
             img = cv2.imread(png_path)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -174,6 +181,5 @@ class PURELoader(BaseLoader):
         """Reads a bvp signal file."""
         with open(bvp_file, "r") as f:
             labels = json.load(f)
-            waves = [label["Value"]["waveform"]
-                     for label in labels["/FullPackage"]]
+            waves = [label["Value"]["waveform"] for label in labels["/FullPackage"]]
         return np.asarray(waves)
