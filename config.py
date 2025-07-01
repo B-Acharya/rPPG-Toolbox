@@ -362,6 +362,8 @@ _C.MODEL.RESUME = ""
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
 _C.MODEL.MODEL_DIR = "PreTrainedModels"
+_C.MODEL.SCHEDULER = None
+
 
 # Specific parameters for physnet parameters
 _C.MODEL.PHYSNET = CN()
