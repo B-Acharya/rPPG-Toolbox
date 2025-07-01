@@ -159,11 +159,7 @@ class CMBPLoader(BaseLoader):
         print("data path exists", os.path.exists(os.path.join(video_path, "data.hdf5")))
         frames = self.read_video(os.path.join(video_path, video_filename))
 
-        if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            print("Generating PSUEDO labaels")
-            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
-        else:
-            bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
+        bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
         # bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
 
         print("frame shape", frames.shape)

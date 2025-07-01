@@ -131,7 +131,7 @@ class PURELoader(BaseLoader):
         print("start with pre-process")
 
         if "None" in config_preprocess.DATA_AUG:
-            print("reading video")
+            print("reading Images")
             # Utilize dataset-specific function to read video
             frames = self.read_video(os.path.join(data_dirs[i]["path"], ""))
             print("done reading video")
@@ -145,13 +145,10 @@ class PURELoader(BaseLoader):
                 f"Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}."
             )
 
-        if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            print("Generating PSUEDO labaels")
-            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
-        else:
-            bvps = self.read_wave(
-                os.path.join(self.raw_data_path, "{0}.json".format(filename))
-            )
+        bvps = self.read_wave(
+            os.path.join(self.raw_data_path, "{0}.json".format(filename))
+        )
+
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
         # if config_preprocess.TRIM:

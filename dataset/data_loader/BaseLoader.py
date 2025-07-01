@@ -440,6 +440,13 @@ class BaseLoader(Dataset):
         print("pre data shape", data[0].shape)
         data = np.concatenate(data, axis=-1)  # concatenate all channels
         # print("data shape", data.shape)
+
+        if config_preprocess.USE_PSUEDO_PPG_LABEL:
+            print("Generating PSUEDO labaels")
+            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+        else:
+            print("Using GT signal")
+
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
