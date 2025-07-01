@@ -145,11 +145,13 @@ class PURELoader(BaseLoader):
                 f"Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}."
             )
 
-        # bvps = self.read_wave(
-        #     os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
-        bvps = self.read_wave(
-            os.path.join(self.raw_data_path, "{0}.json".format(filename))
-        )
+        if config_preprocess.USE_PSUEDO_PPG_LABEL:
+            print("Generating PSUEDO labaels")
+            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+        else:
+            bvps = self.read_wave(
+                os.path.join(self.raw_data_path, "{0}.json".format(filename))
+            )
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
         # if config_preprocess.TRIM:
