@@ -31,18 +31,18 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
 
     best_model_dir = "saved_models"
     os.makedirs(best_model_dir, exist_ok=True)
-    best_model_path = os.path.join(best_model_dir, "VAE64_best_model_New_2.pth")
+    best_model_path = os.path.join(best_model_dir, "VAE64_best_model_New_3.pth")
 
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_64_New_2_{timestamp}")
+    log_dir = os.path.join("tensorboard_logs", f"rppg_vae_64_New_3_{timestamp}")
     writer = SummaryWriter(log_dir=log_dir)
     print(f"TensorBoard logs will be saved to {log_dir}")
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
-    patience = 30
+    patience = 100
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -87,6 +87,10 @@ def train_rppg_vae(model, config, train_loader, valid_loader=None, device='cuda'
                 k: np.mean([x[k] for x in valid_losses])
                 for k in valid_losses[0].keys()
             }
+
+            scheduler_metric = (avg_valid_losses["bvp_corr_loss"] + avg_valid_losses["bvp_temporal_loss"])
+
+            trainer.update_scheduler(val_loss=scheduler_metric)
 
 
             writer.add_scalar('Loss/valid/total', avg_valid_losses["total_loss"], epoch)

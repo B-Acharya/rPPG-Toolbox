@@ -13,48 +13,84 @@ import random
 # This is the dataset class that loads the raw MMPD data directly from the .mat files with subject based splitting as it  is with the original MMPDdataloader. I didn't do the resising here but it will only take a couple of line changes.
 class ImprovedMMPDDataset(Dataset):
 
-    def __init__(self, data_path, frame_depth=64):
+    def __init__(self, data_path, frame_depth=64, sample_frames = 180,n_chunks_per_segment = 4):
+
+
 
         self.frame_depth = frame_depth
+        self.sample_frames = sample_frames
+        self.n_chunks_per_segment = n_chunks_per_segment
         self.data_path = data_path
-        self.mat_files = []
-        # check which mat file belongs to which subject
-        self.file_to_subject = {}
+
+
+        #Store all chunks info
+
+        self.chunks = []
 
         # Finding all subject directories
         all_subject_items = glob.glob(os.path.join(self.data_path, 'subject*'))
         subject_dirs = [item for item in all_subject_items if os.path.isdir(item)]
         subject_dirs = sorted(subject_dirs)
 
-        print(len(subject_dirs))
-        # need all the files for a specific subject
-        self.subject_to_files = defaultdict(list)
+        total_videos = 0
 
         for subject_dir in subject_dirs:
             subject_name = os.path.basename(subject_dir)
             subject_files = glob.glob(os.path.join(subject_dir, '*.mat'))
 
-            if subject_files:
-                for file_path in subject_files:
-                    self.mat_files.append(file_path)
-                    self.file_to_subject[file_path] = subject_name
-                    self.subject_to_files[subject_name].append(file_path)
+            for file_path in subject_files:
+                total_videos += 1
+                video_chunks = self._create_chunks_for_video(file_path, subject_name)
+                self.chunks.extend(video_chunks)
 
-        self.subjects = list(self.subject_to_files.keys())
+        self.subjects = list(set([c['subject'] for c in self.chunks]))
 
-        print(f"Found {len(self.subjects)} subjects with data")
-        print(f"Total {len(self.mat_files)} .mat files")
+        print(f"\nDataset Statistics:")
+        print(f"  Total videos: {total_videos}")
+        print(f"  Total chunks: {len(self.chunks)}")
+
+
+    def _create_equal_spacing_chunks(self,n_chunks):
+
+        if n_chunks == 1:
+            return [(0, self.frame_depth)]
+
+        stride = (self.sample_frames - self.frame_depth)/ (n_chunks-1)
+
+        chunks = []
+
+        for i in range(n_chunks):
+            start = int(i * stride)
+            end = min(start + self.frame_depth, self.sample_frames)
+            chunks.append((start, end))
+
+        return chunks
+
+    def _create_chunks_for_video(self, file_path, subject_name):
+
+        chunks = []
+
+        chunk_position = self._create_equal_spacing_chunks(self.n_chunks_per_segment)
+
+        segments = [('random', 'random')]
+        # segments = [('start', 0)]
+
+        for seg_name, seg_start in segments:
+            for chunk_idx,(chunk_start, chunk_end) in enumerate(chunk_position):
+                chunks.append({
+                    'path': file_path,
+                    'subject': subject_name,
+                    'segment_name': seg_name,
+                    'segment_start': seg_start,
+                    'chunk_idx': chunk_idx,
+                    'chunk_start_in_segment': chunk_start,
+                    'chunk_end_in_segment': chunk_end
+                })
+
+        return chunks
 
     def __len__(self):
-        return len(self.mat_files)
-
-    def get_subjects(self):
-        ## Return the list of all subjects
-        return self.subjects
-
-    def get_subject_for_idx(self, idx):
-        ##  subject ID for a given sample index
-        return self.file_to_subject[self.mat_files[idx]]
+        return len(self.chunks)
 
     def preprocess_frames(self, frames):
 
@@ -111,28 +147,33 @@ class ImprovedMMPDDataset(Dataset):
 
     def __getitem__(self, idx):
         try:
-            mat_data = sio.loadmat(self.mat_files[idx])
+            chunk_info = self.chunks[idx]
 
-            # (T, H, W, C)
-            frames = np.array(mat_data['video'])
-            # (T,)
-            bvp = np.array(mat_data['GT_ppg']).T.reshape(-1)
+            #load mat file
+            mat_data = sio.loadmat(chunk_info['path'])
+            all_frames = np.array(mat_data['video'])
+            all_bvp = np.array(mat_data['GT_ppg']).T.reshape(-1)
 
-            if frames.shape[0] < self.frame_depth:
-                repetitions = int(np.ceil(self.frame_depth / frames.shape[0]))
-                repeated_frames = np.tile(frames, (repetitions, 1, 1, 1))
-                frames = repeated_frames[:self.frame_depth]
-
-                repeated_bvp = np.tile(bvp, repetitions)
-                bvp = repeated_bvp[:self.frame_depth]
+            if chunk_info['segment_start'] == 'random':
+                max_start = 1800 - self.sample_frames
+                segment_start = np.random.randint(0,max_start+1)
             else:
-                frames = frames[:self.frame_depth]
-                bvp = bvp[:self.frame_depth]
+                segment_start = chunk_info['segment_start']
+
+            # Extract 180-frame segment
+            segment_end = segment_start + self.sample_frames
+            segment_frames = all_frames[segment_start:segment_end]
+            segment_bvp = all_bvp[segment_start:segment_end]
+
+            #Extract chunk from segment
+            chunk_start = chunk_info['chunk_start_in_segment']
+            chunk_end = chunk_info['chunk_end_in_segment']
 
             # Apply preprocessing (CLAHE enhancement)
-            frames = self.preprocess_frames(frames)
+            frames = segment_frames[chunk_start:chunk_end]
+            bvp = segment_bvp[chunk_start:chunk_end]
 
-            # Normalize BVP
+            frames = self.preprocess_frames(frames)
             bvp = self.preprocess_bvp(bvp)
 
             # Transpose for PyTorch (C, T, H, W)
@@ -144,11 +185,16 @@ class ImprovedMMPDDataset(Dataset):
             return frames, bvp
 
         except Exception as e:
-            print(f"Error loading file {self.mat_files[idx]}: {str(e)}")
+            print(f"Error loading file {idx}: {str(e)}")
             frames = torch.zeros((3, self.frame_depth, 80, 60))
             bvp = torch.zeros(self.frame_depth)
             return frames, bvp
 
+    def get_subjects(self):
+        return self.subjects
+
+    def get_subject_for_idx(self, idx):
+        return self.chunks[idx]['subject']
 
 def create_subject_split_indices(dataset, train_ratio=0.8, random_seed=42):
 
@@ -177,12 +223,14 @@ def create_subject_split_indices(dataset, train_ratio=0.8, random_seed=42):
     return train_indices, test_indices
 
 
-def prepare_mmpd_dataloaders(config, frame_depth=16, train_ratio=0.8, random_seed=42):
+def prepare_mmpd_dataloaders(config, frame_depth=64, train_ratio=0.8, random_seed=42, n_chunks=4):
 
 
     full_dataset = ImprovedMMPDDataset(
         data_path=config.TRAIN.DATA.DATA_PATH,
-        frame_depth=frame_depth
+        frame_depth=frame_depth,
+        sample_frames = 180,
+        n_chunks_per_segment = n_chunks
     )
 
 

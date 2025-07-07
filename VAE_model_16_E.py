@@ -19,24 +19,23 @@ class BVP_Decoder(nn.Module):
         )
 
         self.temporal = nn.Sequential(
-            nn.Conv1d(32,16, kernel_size=5,padding=2),
+            nn.Conv1d(32, 16, kernel_size=5, padding=2),
             nn.BatchNorm1d(16),
             nn.GELU(),
-            nn.Conv1d(16, 1, kernel_size=3,padding=1),
+            nn.Conv1d(16, 1, kernel_size=3, padding=1),
             nn.Tanh()
         )
 
     def forward(self, x):
         x = self.expand(x)
-        x = x.transpose(1,2)
+        x = x.transpose(1, 2)
         output = self.temporal(x)
         return output.squeeze(1)
 
 
-
 class RPPGVAE_64(nn.Module):
 
-    def __init__(self, frame_depth = 64, latent_dim=4, hidden_dims = 512, input_height = 80, input_width = 60, beta = 4.0):
+    def __init__(self, frame_depth = 64, latent_dim=12, hidden_dims = 512, input_height = 80, input_width = 60, beta = 4.0):
         super(RPPGVAE_64, self).__init__()
         self.frame_depth = frame_depth
         self.latent_dim = latent_dim
@@ -76,10 +75,10 @@ class RPPGVAE_64(nn.Module):
             nn.ReLU(),
             nn.Conv3d(self.spatial_channels, self.spatial_channels, kernel_size=(7, 1, 1), padding=(3, 0, 0)),
             nn.BatchNorm3d(self.spatial_channels),
+            nn.ReLU(),
+            nn.Conv3d(self.spatial_channels, self.spatial_channels,kernel_size=(11, 1, 1), padding=(5, 0, 0)),
+            nn.BatchNorm3d(self.spatial_channels),
             nn.ReLU()
-            # nn.Conv3d(self.spatial_channels, self.spatial_channels,kernel_size=(11, 1, 1), padding=(5, 0, 0)),
-            # nn.BatchNorm3d(self.spatial_channels),
-            # nn.ReLU()
         )
 
         self.frame_flatten = nn.Flatten(2,4)
@@ -102,12 +101,12 @@ class RPPGVAE_64(nn.Module):
         # )
 
         self.fc_frame = nn.Sequential(
-            nn.Linear(self.spatial_features_dim, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(self.spatial_features_dim, 256),
+            nn.BatchNorm1d(256),
             nn.GELU(),
-            nn.Dropout(0.5),
+            nn.Dropout(0.3),
 
-            nn.Linear(512,128),
+            nn.Linear(256,128),
             nn.BatchNorm1d(128),
             nn.GELU(),
             nn.Dropout(0.4),
@@ -165,7 +164,7 @@ class RPPGVAE_64(nn.Module):
         # )
         self.bvp_decoder = BVP_Decoder(latent_dim=latent_dim)
 
-        self.free_bits = 0.5
+        self.free_bits = 0.3
 
     def encode(self, x):
 
@@ -276,10 +275,17 @@ class VAE_64_Trainer:
 
 
 
-
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            self.optimizer, T_0=20, T_mult=2, eta_min=1e-6
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,
+            patience=15,
+            min_lr=1e-7,
+            verbose=True
         )
+        # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        #     self.optimizer, T_0=20, T_mult=2, eta_min=1e-6
+        # )
 
         self.current_epoch = 0
         self.beta_max = model.beta
@@ -355,10 +361,10 @@ class VAE_64_Trainer:
 
         if self.current_epoch < 10:
             # Early: Focus on BVP but maintain minimum frame reconstruction
-            frame_weight = 0.2  # Not too low - need spatial awareness
-            bvp_mse_weight = 0.4
-            bvp_corr_weight = 0.8  # Primary focus
-            bvp_temporal_weight = 0.4
+            frame_weight = 0.3  # Not too low - need spatial awareness
+            bvp_mse_weight = 0.5
+            bvp_corr_weight = 1.2  # Primary focus
+            bvp_temporal_weight = 0.7
         elif self.current_epoch < 30:
             # Middle: Gradual transition
             progress = (self.current_epoch - 10) / 20
@@ -424,18 +430,20 @@ class VAE_64_Trainer:
             'bvp_temporal_loss': bvp_temporal_loss.item()
         }
 
-    def update_scheduler(self):
+    def update_scheduler(self, val_loss = None):
 
-        self.scheduler.step()
         self.current_epoch += 1
+
+        if val_loss is not None:
+            self.scheduler.step(val_loss)
 
 
 def init_rppg_vae():
 
     model = RPPGVAE_64(
         frame_depth=64,
-        latent_dim=4,
-        hidden_dims=512,
+        latent_dim=8,
+        hidden_dims=256,
         input_height=80,
         input_width=60
     )
