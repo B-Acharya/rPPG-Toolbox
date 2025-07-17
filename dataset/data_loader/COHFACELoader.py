@@ -21,7 +21,7 @@ from dataset.data_loader.BaseLoader import BaseLoader
 class COHFACELoader(BaseLoader):
     """The data loader for the COHFACE dataset."""
 
-    def __init__(self, name, data_path, config_data, model):
+    def __init__(self, name, data_path, config_data, model, device=None):
         """Initializes an COHFACE dataloader.
             Args:
                 data_path(str): path of a folder which stores raw video and bvp data.

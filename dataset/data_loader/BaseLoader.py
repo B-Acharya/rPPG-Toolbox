@@ -9,20 +9,25 @@ import csv
 import glob
 import os
 import re
-
-import numpy
 from math import ceil
 from scipy import signal
 from scipy import sparse
 from unsupervised_methods.methods import POS_WANG
 from unsupervised_methods import utils
 import math
-from multiprocessing import Pool, Process, Value, Array, Manager
-from torchvision import transforms
+import multiprocessing as mp
+
+# To be used only for preparing data - for detecting face with YOLO5Face
+try:
+    mp.set_start_method('spawn', force=True)
+    # print("spawned")
+except RuntimeError:
+    pass
 
 import cv2
 import numpy as np
 import pandas as pd
+import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import random
@@ -84,7 +89,7 @@ class BaseLoader(Dataset):
             "--preprocess", default=None, action='store_true')
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data, model):
+    def __init__(self, dataset_name, raw_data_path, config_data, model, device=None):
         """Inits dataloader with lists of files.
 
         Args:
@@ -102,7 +107,6 @@ class BaseLoader(Dataset):
         self.preprocessed_data_len = 0
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
-        self.loo = config_data.LOO
         self.shuffle = config_data.SHUFFLE
         self.fs = config_data.FS
         # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
@@ -111,6 +115,11 @@ class BaseLoader(Dataset):
             self.transform = transforms.Compose([Normaliztion(), RandomHorizontalFlip()])
         if self.loo:
             self.participant_ids = config_data.PARTICIPANT_IDS
+
+        if self.do_preprocess:
+            from dataset.data_loader.face_detector.YOLO5Face import YOLO5Face
+            if 'Y5F' in self.config_data.PREPROCESS.CROP_FACE.BACKEND:
+                self.Y5FObj = YOLO5Face(self.config_data.PREPROCESS.CROP_FACE.BACKEND, device)
 
         assert (config_data.BEGIN < config_data.END)
         assert (config_data.BEGIN > 0 or config_data.BEGIN == 0)
@@ -158,7 +167,7 @@ class BaseLoader(Dataset):
         # item_path_filename is simply the filename of the specific clip
         # For example, the preceding item_path's filename would be 501_input0.npy
         item_path_filename = item_path.split(os.sep)[-1]
-        #train split_idx represents the point in the previous filename where we want to split the string
+        # split_idx represents the point in the previous filename where we want to split the string
         # in order to retrieve a more precise filename (e.g., 501) preceding the chunk (e.g., input0)
         split_idx = item_path_filename.rindex('_')
         # Following the previous comments, the filename for example would be 501
@@ -313,7 +322,7 @@ class BaseLoader(Dataset):
         amplitude_envelope = np.abs(analytic_signal) # derive envelope signal
         env_norm_bvp = pos_bvp/amplitude_envelope # normalize by env
 
-        return env_norm_bvp # return data dict w/ POS psuedo labels
+        return np.array(env_norm_bvp) # return POS psuedo labels
 
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
@@ -324,13 +333,9 @@ class BaseLoader(Dataset):
             begin(float): index of begining during train/val split.
             end(float): index of ending during train/val split.
         """
-        if not self.loo:
-            data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset
-        else:
-            data_dirs_split = self.split_raw_data_loo(data_dirs, self.participant_ids)
+        data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset
         # send data directories to be processed
         file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess)
-        print(file_list_dict)
         self.build_file_list(file_list_dict)  # build file list
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
         print("Total Number of raw files preprocessed:", len(data_dirs_split), end='\n\n')
@@ -428,8 +433,7 @@ class BaseLoader(Dataset):
             # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
             # (x,y) corresponds to the top-left corner of the zone to define using
             # the computed width and height.
-            # print(frame.shape)
-            face_zone = detector.detectMultiScale(frame)
+            face_zone = detector.detectMultiScale(frame[:, :, :3].astype(np.uint8))
 
             if len(face_zone) < 1:
                 print("ERROR: No Face Detected")
@@ -442,22 +446,14 @@ class BaseLoader(Dataset):
                 print("Warning: More than one faces are detected. Only cropping the biggest one.")
             else:
                 face_box_coor = face_zone[0]
-        elif backend == "RF":
-            # Use a TensorFlow-based RetinaFace implementation for face detection
+        elif "Y5F" in backend:
+            # Use a YOLO5Face trained on WiderFace dataset
             # This utilizes both the CPU and GPU
-            res = RetinaFace.detect_faces(frame)
-            print("Res printo")
-            print(res)
 
-            if len(res) > 0:
-                # Pick the highest score
-                highest_score_face = max(res.values(), key=lambda x: x['score'])
-                face_zone = highest_score_face['facial_area']
+            res = self.Y5FObj.detect_face(frame[:, :, :3].astype(np.uint8))
 
-                # This implementation of RetinaFace returns a face_zone in the
-                # form [x_min, y_min, x_max, y_max] that corresponds to the
-                # corners of a face zone
-                x_min, y_min, x_max, y_max = face_zone
+            if res != None:
+                x_min, y_min, x_max, y_max = res
 
                 # Convert to this toolbox's expected format
                 # Expected format: [x_coord, y_coord, width, height]
@@ -477,6 +473,7 @@ class BaseLoader(Dataset):
                 new_x = center_x - (square_size // 2)
                 new_y = center_y - (square_size // 2)
                 face_box_coor = [new_x, new_y, square_size, square_size]
+
             else:
                 print("ERROR: No Face Detected")
                 face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
@@ -528,8 +525,9 @@ class BaseLoader(Dataset):
             face_region_median = np.median(face_region_all, axis=0).astype('int')
 
         # Frame Resizing
-        resized_frames = np.zeros((frames.shape[0], height, width, 3))
-        for i in range(0, frames.shape[0]):
+        total_frames, _, _, channels = frames.shape
+        resized_frames = np.zeros((total_frames, height, width, channels))
+        for i in range(0, total_frames):
             frame = frames[i]
             if use_dynamic_detection:  # use the (i // detection_freq)-th facial region.
                 reference_index = i // detection_freq
@@ -644,7 +642,7 @@ class BaseLoader(Dataset):
                 count += 1
             return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -660,7 +658,7 @@ class BaseLoader(Dataset):
         pbar = tqdm(list(choose_range))
 
         # shared data resource
-        manager = Manager()  # multi-process manager
+        manager = mp.Manager()  # multi-process manager
         file_list_dict = manager.dict()  # dictionary for all processes to store processed files
         p_list = []  # list of processes
         running_num = 0  # number of running processes
@@ -671,7 +669,7 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    p = Process(target=self.preprocess_dataset_subprocess, 
+                    p = mp.Process(target=self.preprocess_dataset_subprocess,
                                 args=(data_dirs,config_preprocess, i, file_list_dict))
                     p.start()
                     p_list.append(p)
@@ -774,7 +772,7 @@ class BaseLoader(Dataset):
         diffnormalized_len = n - 1
         diffnormalized_data = np.zeros((diffnormalized_len, h, w, c), dtype=np.float32)
         diffnormalized_data_padding = np.zeros((1, h, w, c), dtype=np.float32)
-        for j in range(diffnormalized_len - 1):
+        for j in range(diffnormalized_len):
             diffnormalized_data[j, :, :, :] = (data[j + 1, :, :, :] - data[j, :, :, :]) / (
                     data[j + 1, :, :, :] + data[j, :, :, :] + 1e-7)
         diffnormalized_data = diffnormalized_data / np.std(diffnormalized_data)
