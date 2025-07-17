@@ -14,8 +14,14 @@ from scipy import signal
 from rPPG_Toolbox.unsupervised_methods.methods import POS_WANG
 from rPPG_Toolbox.unsupervised_methods import utils
 import math
-from multiprocessing import Process, Manager
-from torchvision import transforms
+import multiprocessing as mp
+
+# To be used only for preparing data - for detecting face with YOLO5Face
+try:
+    mp.set_start_method("spawn", force=True)
+    # print("spawned")
+except RuntimeError:
+    pass
 
 import cv2
 import numpy as np
@@ -24,6 +30,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import random
 from scipy.signal import welch
+# from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
 
 
 def get_hr(y, sr=30, min=30, max=180):
@@ -84,7 +91,7 @@ class BaseLoader(Dataset):
         parser.add_argument("--preprocess", default=None, action="store_true")
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data, model):
+    def __init__(self, dataset_name, raw_data_path, config_data, model, device=None):
         """Inits dataloader with lists of files.
 
         Args:
@@ -113,6 +120,16 @@ class BaseLoader(Dataset):
             )
         if self.loo:
             self.participant_ids = config_data.PARTICIPANT_IDS
+
+        if self.do_preprocess:
+            from rPPG_Toolbox.dataset.data_loader.face_detector.YOLO5Face import (
+                YOLO5Face,
+            )
+
+            if "Y5F" in config_data.PREPROCESS.CROP_FACE.BACKEND:
+                self.Y5FObj = YOLO5Face(
+                    config_data.PREPROCESS.CROP_FACE.BACKEND, device
+                )
 
         assert config_data.BEGIN < config_data.END
         assert config_data.BEGIN > 0 or config_data.BEGIN == 0
@@ -364,7 +381,7 @@ class BaseLoader(Dataset):
         amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
         env_norm_bvp = pos_bvp / amplitude_envelope  # normalize by env
 
-        return env_norm_bvp  # return data dict w/ POS psuedo labels
+        return np.array(env_norm_bvp)  # return POS psuedo labels
 
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
@@ -493,7 +510,7 @@ class BaseLoader(Dataset):
             # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
             # (x,y) corresponds to the top-left corner of the zone to define using
             # the computed width and height.
-            face_zone = detector.detectMultiScale(frame)
+            face_zone = detector.detectMultiScale(frame[:, :, :3].astype(np.uint8))
 
             if len(face_zone) < 1:
                 print("ERROR: No Face Detected")
@@ -508,20 +525,14 @@ class BaseLoader(Dataset):
                 )
             else:
                 face_box_coor = face_zone[0]
-        elif backend == "RF":
-            # Use a TensorFlow-based RetinaFace implementation for face detection
+        elif "Y5F" in backend:
+            # Use a YOLO5Face trained on WiderFace dataset
             # This utilizes both the CPU and GPU
-            res = RetinaFace.detect_faces(frame)
 
-            if len(res) > 0:
-                # Pick the highest score
-                highest_score_face = max(res.values(), key=lambda x: x["score"])
-                face_zone = highest_score_face["facial_area"]
+            res = self.Y5FObj.detect_face(frame[:, :, :3].astype(np.uint8))
 
-                # This implementation of RetinaFace returns a face_zone in the
-                # form [x_min, y_min, x_max, y_max] that corresponds to the
-                # corners of a face zone
-                x_min, y_min, x_max, y_max = face_zone
+            if res != None:
+                x_min, y_min, x_max, y_max = res
 
                 # Convert to this toolbox's expected format
                 # Expected format: [x_coord, y_coord, width, height]
@@ -541,6 +552,7 @@ class BaseLoader(Dataset):
                 new_x = center_x - (square_size // 2)
                 new_y = center_y - (square_size // 2)
                 face_box_coor = [new_x, new_y, square_size, square_size]
+
             else:
                 print("ERROR: No Face Detected")
                 face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
@@ -615,8 +627,9 @@ class BaseLoader(Dataset):
             face_region_median = np.median(face_region_all, axis=0).astype("int")
 
         # Frame Resizing
-        resized_frames = np.zeros((frames.shape[0], height, width, 3))
-        for i in range(0, frames.shape[0]):
+        total_frames, _, _, channels = frames.shape
+        resized_frames = np.zeros((total_frames, height, width, channels))
+        for i in range(0, total_frames):
             frame = frames[i]
             if use_dynamic_detection:  # use the (i // detection_freq)-th facial region.
                 reference_index = i // detection_freq
@@ -771,7 +784,7 @@ class BaseLoader(Dataset):
             return input_path_name_list, label_path_name_list
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=1
+        self, data_dirs, config_preprocess, multi_process_quota=8
     ):
         """Allocate dataset preprocessing across multiple processes.
 
@@ -788,7 +801,7 @@ class BaseLoader(Dataset):
         pbar = tqdm(list(choose_range))
 
         # shared data resource
-        manager = Manager()  # multi-process manager
+        manager = mp.Manager()  # multi-process manager
         file_list_dict = (
             manager.dict()
         )  # dictionary for all processes to store processed files
@@ -801,7 +814,7 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    p = Process(
+                    p = mp.Process(
                         target=self.preprocess_dataset_subprocess,
                         args=(data_dirs, config_preprocess, i, file_list_dict),
                     )

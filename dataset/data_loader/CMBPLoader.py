@@ -54,7 +54,7 @@ class CMBPLoader(BaseLoader):
      -----------------
     """
 
-    def __init__(self, name, data_path, config_data, model):
+    def __init__(self, name, data_path, config_data, model, device):
         """Initializes an UBFC dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -62,7 +62,8 @@ class CMBPLoader(BaseLoader):
             name(string): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
         """
-        super().__init__(name, data_path, config_data, model)
+        self.backend = config_data.PREPROCESS.CROP_FACE.BACKEND
+        super().__init__(name, data_path, config_data, model, device)
 
     def get_raw_data(self, data_path):
         """Returns data directories under the path(For CMBP dataset)."""
@@ -157,7 +158,7 @@ class CMBPLoader(BaseLoader):
             "os path exists", os.path.exists(os.path.join(video_path, video_filename))
         )
         print("data path exists", os.path.exists(os.path.join(video_path, "data.hdf5")))
-        frames = self.read_video(os.path.join(video_path, video_filename))
+        frames = self.read_video(os.path.join(video_path, video_filename), self.backend)
 
         bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
         # bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
@@ -176,7 +177,7 @@ class CMBPLoader(BaseLoader):
         file_list_dict[i] = input_name_list
 
     @staticmethod
-    def read_video(video_file):
+    def read_video(video_file, backend):
         """Reads a video file, returns frames(T, H, W, 3)"""
         print("enter read")
         VidObj = cv2.VideoCapture(video_file)
@@ -185,7 +186,8 @@ class CMBPLoader(BaseLoader):
         frames = list()
         while success:
             frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (480, 270))  # Keep 16:9
+            if backend == "HC":
+                frame = cv2.resize(frame, (480, 270))  # Keep 16:9
             frame = np.asarray(frame)
             frames.append(frame)
             success, frame = VidObj.read()

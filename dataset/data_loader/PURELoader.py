@@ -22,7 +22,7 @@ class PURELoader(BaseLoader):
 
     num_of_participants = 10
 
-    def __init__(self, name, data_path, config_data, model):
+    def __init__(self, name, data_path, config_data, model, device):
         """Initializes an PURE dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -44,7 +44,7 @@ class PURELoader(BaseLoader):
             config_data(CfgNode): data settings(ref:config.py).
         """
         print("Loading pure dataset...")
-        super().__init__(name, data_path, config_data, model)
+        super().__init__(name, data_path, config_data, model, device)
         self.num_of_participants = 10
 
     def get_raw_data(self, data_path):
