@@ -101,6 +101,7 @@ class BaseLoader(Dataset):
         """
         self.inputs = list()
         self.labels = list()
+        self.labels_psuedo = list()
         self.dataset_name = dataset_name
         self.infer_dataset = config_data.DATASET
         self.raw_data_path = raw_data_path
@@ -176,6 +177,8 @@ class BaseLoader(Dataset):
         """Returns a clip of video(3,T,W,H) and it's corresponding signals(T)."""
         data = np.load(self.inputs[index])
         label = np.load(self.labels[index])
+        label_psuedo = np.load(self.labels_psuedo[index])
+
         if self.data_format == "NDCHW":
             data = np.transpose(data, (0, 3, 1, 2))
         elif self.data_format == "NCDHW":
@@ -186,6 +189,8 @@ class BaseLoader(Dataset):
             raise ValueError("Unsupported Data Format!")
         data = np.float32(data)
         label = np.float32(label)
+        label_psuedo = np.float32(label_psuedo)
+
         # item_path is the location of a specific clip in a preprocessing output folder
         # For example, an item path could be /home/data/PURE_SizeW72_...unsupervised/501_input0.npy
         item_path = self.inputs[index]
@@ -220,7 +225,7 @@ class BaseLoader(Dataset):
                 clip_average_HR,
             )
 
-        return data, label, filename, chunk_id
+        return data, label, filename, chunk_id, label_psuedo
 
     def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
         clip_frames = data.shape[0]  # 160
@@ -454,15 +459,11 @@ class BaseLoader(Dataset):
                 # plt.show()
             else:
                 raise ValueError("Unsupported data type!")
-        print("pre data shape", data[0].shape)
         data = np.concatenate(data, axis=-1)  # concatenate all channels
         # print("data shape", data.shape)
 
-        if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            print("Generating PSUEDO labaels")
-            bvps = self.generate_pos_psuedo_labels(frames, fs=self.fs)
-        else:
-            print("Using GT signal")
+        print("Generating PSUEDO labaels")
+        bvps_psuedo = self.generate_pos_psuedo_labels(frames, fs=self.fs)
 
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
@@ -471,11 +472,13 @@ class BaseLoader(Dataset):
                 pass
             else:
                 bvps = BaseLoader.diff_normalize_label(bvps)
+                bvps_psuedo = BaseLoader.diff_normalize_label(bvps_psuedo)
         elif config_preprocess.LABEL_TYPE == "Standardized":
             if self.infer_dataset == "DST":
                 pass
             else:
                 bvps = BaseLoader.standardized_label(bvps)
+                bvps_psuedo = BaseLoader.standardized_label(bvps_psuedo)
         else:
             raise ValueError("Unsupported label type!")
 
@@ -483,11 +486,15 @@ class BaseLoader(Dataset):
             frames_clips, bvps_clips = self.chunk(
                 data, bvps, config_preprocess.CHUNK_LENGTH
             )
+            _, bvps_psuedo_clips = self.chunk(
+                data, bvps_psuedo, config_preprocess.CHUNK_LENGTH
+            )
         else:
             frames_clips = np.array([data])
             bvps_clips = np.array([bvps])
-        print("exit inner loop")
-        return frames_clips, bvps_clips
+            bvps_psuedo_clips = np.array([bvps_psuedo])
+
+        return frames_clips, bvps_clips, bvps_psuedo_clips
 
     def face_detection(self, frame, backend, use_larger_box=False, larger_box_coef=1.0):
         """Face detection on a single frame.
@@ -601,7 +608,6 @@ class BaseLoader(Dataset):
             resized_frames(list[np.array(float)]): Resized and cropped frames
         """
         # Face Cropping
-        print("in crop face")
         if use_dynamic_detection:
             num_dynamic_det = ceil(frames.shape[0] / detection_freq)
         else:
@@ -609,7 +615,7 @@ class BaseLoader(Dataset):
         face_region_all = []
         # Perform face detection by num_dynamic_det" times.
         print(frames[0].shape)
-        for idx in range(num_dynamic_det):
+        for idx in tqdm(range(num_dynamic_det)):
             if use_face_detection:
                 face_region_all.append(
                     self.face_detection(
@@ -651,7 +657,7 @@ class BaseLoader(Dataset):
             resized_frames[i] = cv2.resize(
                 frame, (width, height), interpolation=cv2.INTER_AREA
             )
-        print("exit crop face")
+        print("leaving crop face")
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):
@@ -727,7 +733,7 @@ class BaseLoader(Dataset):
             count += 1
         return count
 
-    def save_multi_process(self, frames_clips, bvps_clips, filename):
+    def save_multi_process(self, frames_clips, bvps_clips, bvps_clips_pseudo, filename):
         """Save all the chunked data with multi-thread processing.
 
         Args:
@@ -743,6 +749,7 @@ class BaseLoader(Dataset):
         count = 0
         input_path_name_list = []
         label_path_name_list = []
+        label_psuedo_path_name_list = []
         if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
@@ -765,6 +772,7 @@ class BaseLoader(Dataset):
 
         else:
             for i in range(len(bvps_clips)):
+                print(len(self.inputs), len(self.labels))
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
                 input_path_name = (
                     self.cached_path
@@ -776,17 +784,29 @@ class BaseLoader(Dataset):
                     + os.sep
                     + "{0}_label{1}.npy".format(filename, str(count))
                 )
+                label_psuedo_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_label_psuedo{1}.npy".format(filename, str(count))
+                )
+
                 input_path_name_list.append(input_path_name)
                 label_path_name_list.append(label_path_name)
+                label_psuedo_path_name_list.append(label_psuedo_path_name)
                 np.save(input_path_name, frames_clips[i])
                 np.save(label_path_name, bvps_clips[i])
+                np.save(label_psuedo_path_name, bvps_clips_pseudo[i])
                 count += 1
-            return input_path_name_list, label_path_name_list
+            return (
+                input_path_name_list,
+                label_path_name_list,
+                label_psuedo_path_name_list,
+            )
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=8
+        self, data_dirs, config_preprocess, multi_process_quota=1
     ):
-        """Allocate dataset preprocessing across multiple processes.
+        """Allocate dataset preprocessing across multiple processes with status monitoring.
 
         Args:
             data_dirs(List[str]): a list of video_files.
@@ -795,18 +815,22 @@ class BaseLoader(Dataset):
         Returns:
             file_list_dict(Dict): Dictionary containing information regarding processed data ( path names)
         """
+        import time
+
         print("Preprocessing dataset...")
         file_num = len(data_dirs)
         choose_range = range(0, file_num)
-        pbar = tqdm(list(choose_range))
+        pbar = tqdm(list(choose_range), desc="Processing files")
 
         # shared data resource
         manager = mp.Manager()  # multi-process manager
         file_list_dict = (
             manager.dict()
         )  # dictionary for all processes to store processed files
-        p_list = []  # list of processes
+        p_list = []  # list of processes with metadata
         running_num = 0  # number of running processes
+        completed_files = 0
+        failed_files = []
 
         # in range of number of files to process
         for i in choose_range:
@@ -817,22 +841,110 @@ class BaseLoader(Dataset):
                     p = mp.Process(
                         target=self.preprocess_dataset_subprocess,
                         args=(data_dirs, config_preprocess, i, file_list_dict),
+                        name=f"PreprocessWorker-{i}",
                     )
                     p.start()
-                    p_list.append(p)
+                    p_info = {
+                        "process": p,
+                        "file_idx": i,
+                        "filename": data_dirs[i]["index"],
+                    }
+                    p_list.append(p_info)
                     running_num += 1
                     process_flag = False
-                for p_ in p_list:
-                    if not p_.is_alive():
-                        p_list.remove(p_)
-                        p_.join()
+                    print(
+                        f"Started process {p.pid} for file {i}: {data_dirs[i]['index']}"
+                    )
+
+                # Check and clean up finished processes
+                finished_processes = []
+                for p_info in p_list:
+                    p = p_info["process"]
+                    if not p.is_alive():
+                        p.join()  # Wait up to 1 second for cleanup
+
+                        if p.exitcode == 0:
+                            print(
+                                f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+                            )
+                            completed_files += 1
+                        else:
+                            print(
+                                f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+                                f"(exit code: {p.exitcode})"
+                            )
+                            failed_files.append(
+                                {
+                                    "idx": p_info["file_idx"],
+                                    "filename": p_info["filename"],
+                                    "exit_code": p.exitcode,
+                                }
+                            )
+
+                        finished_processes.append(p_info)
                         running_num -= 1
                         pbar.update(1)
-        # join all processes
-        for p_ in p_list:
-            p_.join()
-            pbar.update(1)
+
+                # Remove finished processes from list
+                for p_info in finished_processes:
+                    p_list.remove(p_info)
+
+                # Small delay to prevent busy waiting
+                if running_num >= multi_process_quota:
+                    time.sleep(0.1)
+
+        # Wait for remaining processes to complete
+        print(f"\nWaiting for {len(p_list)} remaining processes to complete...")
+
+        while p_list:
+            finished_processes = []
+            for p_info in p_list:
+                p = p_info["process"]
+
+                if not p.is_alive():
+                    p.join(timeout=1.0)
+
+                    if p.exitcode == 0:
+                        print(
+                            f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+                        )
+                        completed_files += 1
+                    else:
+                        print(
+                            f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+                            f"(exit code: {p.exitcode})"
+                        )
+                        failed_files.append(
+                            {
+                                "idx": p_info["file_idx"],
+                                "filename": p_info["filename"],
+                                "exit_code": p.exitcode,
+                            }
+                        )
+
+                    finished_processes.append(p_info)
+                    pbar.update(1)
+
+            # Remove finished processes
+            for p_info in finished_processes:
+                p_list.remove(p_info)
+
+            if p_list:
+                time.sleep(1)  # Check every second for remaining processes
+
         pbar.close()
+
+        # Print final summary
+        print("\nPREPROCESSING SUMMARY:")
+        print(f"   Completed: {completed_files}/{file_num}")
+        print(f"   Failed: {len(failed_files)}/{file_num}")
+
+        if failed_files:
+            print("\nFAILED FILES:")
+            for fail in failed_files:
+                print(
+                    f"   File {fail['idx']}: {fail['filename']} (exit code: {fail['exit_code']})"
+                )
 
         return file_list_dict
 
@@ -882,9 +994,21 @@ class BaseLoader(Dataset):
         # generate a list of all preprocessed / chunked data files
         file_list = []
         for fname in filename_list:
-            processed_file_data = list(
-                glob.glob(self.cached_path + os.sep + "{0}_input*.npy".format(fname))
-            )
+            if self.infer_dataset == "MMPD":
+                processed_file_data = list(
+                    glob.glob(
+                        self.cached_path
+                        + os.sep
+                        + "subject{0}*_input*.npy".format(fname)
+                    )
+                )
+            else:
+                processed_file_data = list(
+                    glob.glob(
+                        self.cached_path + os.sep + "{0}_input*.npy".format(fname)
+                    )
+                )
+
             file_list += processed_file_data
 
         if not file_list:
@@ -913,8 +1037,13 @@ class BaseLoader(Dataset):
             raise ValueError(self.dataset_name + " dataset loading data error!")
         inputs = sorted(inputs)  # sort input file name list
         labels = [input_file.replace("input", "label") for input_file in inputs]
+        labels_psuedo = [
+            input_file.replace("input", "label_psuedo") for input_file in inputs
+        ]
+
         self.inputs = inputs
         self.labels = labels
+        self.labels_psuedo = labels_psuedo
         self.preprocessed_data_len = len(inputs)
 
     @staticmethod

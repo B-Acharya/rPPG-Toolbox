@@ -157,29 +157,28 @@ class CMBPLoader(BaseLoader):
         print(
             "os path exists", os.path.exists(os.path.join(video_path, video_filename))
         )
-        print("data path exists", os.path.exists(os.path.join(video_path, "data.hdf5")))
         frames = self.read_video(os.path.join(video_path, video_filename), self.backend)
 
         bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
         # bvps = self.read_wave(os.path.join(video_path, "data.hdf5"))
 
-        print("frame shape", frames.shape)
-        print("bvps shape", bvps.shape)
-
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
 
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        print("saving", saved_filename)
-        input_name_list, label_name_list = self.save_multi_process(
-            frames_clips, bvps_clips, saved_filename
+        frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
+            frames, bvps, config_preprocess
+        )
+
+        input_name_list, label_name_list, label_psuedo_name_list = (
+            self.save_multi_process(
+                frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+            )
         )
         file_list_dict[i] = input_name_list
 
     @staticmethod
     def read_video(video_file, backend):
         """Reads a video file, returns frames(T, H, W, 3)"""
-        print("enter read")
         VidObj = cv2.VideoCapture(video_file)
         VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
         success, frame = VidObj.read()
@@ -191,7 +190,6 @@ class CMBPLoader(BaseLoader):
             frame = np.asarray(frame)
             frames.append(frame)
             success, frame = VidObj.read()
-        print("exit read")
         return np.asarray(frames)
 
     @staticmethod

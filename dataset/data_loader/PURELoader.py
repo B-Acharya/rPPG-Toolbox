@@ -154,15 +154,16 @@ class PURELoader(BaseLoader):
         # if config_preprocess.TRIM:
         #     frames = frames[:1800]
         #     bvps = bvps[:1800]
-        print("entering self.preprocess")
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        print("done with pre-process")
+        frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
+            frames, bvps, config_preprocess
+        )
 
-        input_name_list, label_name_list = self.save_multi_process(
-            frames_clips, bvps_clips, saved_filename
+        input_name_list, label_name_list, label_psuedo_name_list = (
+            self.save_multi_process(
+                frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+            )
         )
         file_list_dict[i] = input_name_list
-        print("exit pre-process")
 
     @staticmethod
     def read_video(video_file):
