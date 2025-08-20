@@ -28,8 +28,10 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from torchvision import tv_tensors
 import random
 from scipy.signal import welch
+import torch
 # from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
 
 
@@ -91,7 +93,15 @@ class BaseLoader(Dataset):
         parser.add_argument("--preprocess", default=None, action="store_true")
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data, model, device=None):
+    def __init__(
+        self,
+        dataset_name,
+        raw_data_path,
+        config_data,
+        model,
+        device=None,
+        transform=None,
+    ):
         """Inits dataloader with lists of files.
 
         Args:
@@ -115,6 +125,8 @@ class BaseLoader(Dataset):
         self.fs = config_data.FS
         # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
         self.model = model
+        self.transform = transform
+
         if model == "PhysFormer":
             self.transform = transforms.Compose(
                 [Normaliztion(), RandomHorizontalFlip()]
@@ -179,17 +191,36 @@ class BaseLoader(Dataset):
         label = np.load(self.labels[index])
         label_psuedo = np.load(self.labels_psuedo[index])
 
+        #Converstion for handling augmenatations
+        data = torch.from_numpy(data).float()
+        data = tv_tensors.Video(data)
+
+        label = torch.from_numpy(label).float()
+        label_psuedo = torch.from_numpy(label_psuedo).float()
+
+        # Transform expect the input to be T, C, H, W
+        data = data.permute(0, 3, 1, 2)
+
+
+        if self.transform:
+            data = self.transform(data)
+
+        # Permute back to input shape for handling different config specific transforms
+        data = data.permute(0, 2, 3, 1)
+
         if self.data_format == "NDCHW":
-            data = np.transpose(data, (0, 3, 1, 2))
+            # data = np.transpose(data, (0, 3, 1, 2))
+            data = data.permute(0, 3, 1, 2)
         elif self.data_format == "NCDHW":
-            data = np.transpose(data, (3, 0, 1, 2))
+            # data = np.transpose(data, (3, 0, 1, 2))
+            data = data.permute(3, 0, 1, 2)
         elif self.data_format == "NDHWC":
             pass
         else:
             raise ValueError("Unsupported Data Format!")
-        data = np.float32(data)
-        label = np.float32(label)
-        label_psuedo = np.float32(label_psuedo)
+        # data = np.float32(data)
+        # label = np.float32(label)
+        # label_psuedo = np.float32(label_psuedo)
 
         # item_path is the location of a specific clip in a preprocessing output folder
         # For example, an item path could be /home/data/PURE_SizeW72_...unsupervised/501_input0.npy
@@ -772,7 +803,6 @@ class BaseLoader(Dataset):
 
         else:
             for i in range(len(bvps_clips)):
-                print(len(self.inputs), len(self.labels))
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
                 input_path_name = (
                     self.cached_path
@@ -804,7 +834,7 @@ class BaseLoader(Dataset):
             )
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=1
+        self, data_dirs, config_preprocess, multi_process_quota=8
     ):
         """Allocate dataset preprocessing across multiple processes with status monitoring.
 

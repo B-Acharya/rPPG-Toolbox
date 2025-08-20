@@ -22,7 +22,7 @@ class PURELoader(BaseLoader):
 
     num_of_participants = 10
 
-    def __init__(self, name, data_path, config_data, model, device):
+    def __init__(self, name, data_path, config_data, model, device, transform=None):
         """Initializes an PURE dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -44,7 +44,7 @@ class PURELoader(BaseLoader):
             config_data(CfgNode): data settings(ref:config.py).
         """
         print("Loading pure dataset...")
-        super().__init__(name, data_path, config_data, model, device)
+        super().__init__(name, data_path, config_data, model, device, transform)
         self.num_of_participants = 10
 
     def get_raw_data(self, data_path):
@@ -134,7 +134,6 @@ class PURELoader(BaseLoader):
             print("reading Images")
             # Utilize dataset-specific function to read video
             frames = self.read_video(os.path.join(data_dirs[i]["path"], ""))
-            print("done reading video")
         elif "Motion" in config_preprocess.DATA_AUG:
             # Utilize general function to read video in .npy format
             frames = self.read_npy_video(
