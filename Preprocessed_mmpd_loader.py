@@ -7,6 +7,8 @@ import re
 from collections import defaultdict
 import random
 import pandas as pd
+import time
+
 
 
 
@@ -119,22 +121,25 @@ class OptimisedMMPDDataset(Dataset):
                 end_frame = start_frame + self.frame_depth
 
                 if end_frame <= chunk_length:
-                    frames = np.array(frames[start_frame:end_frame])
-                    bvp = np.array(bvp[start_frame:end_frame])
+                    frames = frames[start_frame:end_frame]
+                    bvp = bvp[start_frame:end_frame]
                 else:
-                    frames = np.array(frames[start_frame:])
-                    bvp = np.array(bvp[start_frame:])
+                    frames = frames[start_frame:]
+                    bvp = bvp[start_frame:]
                     pad_length = self.frame_depth - len(frames)
                     frames = np.pad(frames, ((0, pad_length), (0,0),(0,0),(0,0)), mode='edge')
                     bvp = np.pad(bvp,(0,pad_length),mode='edge')
 
-                frames = frames.transpose(3,0,1,2)
+                frames = np.moveaxis(frames, -1, 0)
 
-            return torch.FloatTensor(frames), torch.FloatTensor(bvp)
+                frames_tensor = torch.from_numpy(frames).float()
+                bvp_tensor = torch.from_numpy(bvp).float()
+
+            return frames_tensor, bvp_tensor
 
         except Exception as e:
             print(f"Error processing {input_file}: {e}")
-            frames = torch.zeros((3,self.frame_depth, 128,128))
+            frames = torch.zeros((3,self.frame_depth, 72,72))
             bvp = torch.zeros(self.frame_depth)
             return frames, bvp
 
@@ -180,10 +185,11 @@ def create_dataloaders_from_csv(csv_file_path, frame_depth= 90, batch_size = 32,
 
 if __name__ == '__main__':
 
-    csv_path = "PUT_CSV_PATH_HERE"
-
+    csv_path = "/data/rppg_23_mmpd_video_nt_lab/processed/DataFileLists/MMPD_SizeW72_SizeH72_ClipLength180_DataTypeRaw_DataAugNone_LabelTypeRaw_Crop_faceTrue_BackendY5F_Large_boxFalse_Large_size1.5_Dyamic_DetTrue_det_len1_Median_face_boxFalse_PSEUDO_LABELFalse_0.0_1.0.csv"
+    start_time = time.time()
     dataset = OptimisedMMPDDataset(csv_file_path = csv_path, sampling_mode = 'sliding')
-
+    dataset_creation_time = time.time() - start_time
+    print(dataset_creation_time)
     print(len(dataset))
 
     if len(dataset) > 0:
