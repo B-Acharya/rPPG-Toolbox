@@ -167,6 +167,9 @@ class BaseLoader(Dataset):
             print("Checking if cached path exists ...", self.file_list_path)
             if not os.path.exists(self.file_list_path):
                 print("File list does not exist... generating now...")
+                raise FileNotFoundError(
+                    "Preprocessing not carried out, please run the processing to run and generate the folds and do not build files retroactively"
+                )
                 self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
                 print(self.raw_data_dirs)
                 self.build_file_list_retroactive(
@@ -191,7 +194,7 @@ class BaseLoader(Dataset):
         label = np.load(self.labels[index])
         label_psuedo = np.load(self.labels_psuedo[index])
 
-        #Converstion for handling augmenatations
+        # Converstion for handling augmenatations
         data = torch.from_numpy(data).float()
         data = tv_tensors.Video(data)
 
@@ -200,7 +203,6 @@ class BaseLoader(Dataset):
 
         # Transform expect the input to be T, C, H, W
         data = data.permute(0, 3, 1, 2)
-
 
         if self.transform:
             data = self.transform(data)
@@ -645,9 +647,10 @@ class BaseLoader(Dataset):
             num_dynamic_det = 1
         face_region_all = []
         # Perform face detection by num_dynamic_det" times.
-        print(frames[0].shape)
+        # print(frames[0].shape)
         for idx in tqdm(range(num_dynamic_det)):
             if use_face_detection:
+                print("using face detection")
                 face_region_all.append(
                     self.face_detection(
                         frames[detection_freq * idx],
