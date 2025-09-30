@@ -512,9 +512,6 @@ def update_config(config, args):
                 "Median_face_box{0}".format(
                     config.TRAIN.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX
                 ),
-                "PSEUDO_LABEL{0}".format(
-                    config.TRAIN.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL
-                ),
             ]
         )
     config.TRAIN.DATA.CACHED_PATH = os.path.join(
@@ -595,9 +592,6 @@ def update_config(config, args):
                     "Median_face_box{0}".format(
                         config.VALID.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX
                     ),
-                    "PSEUDO_LABEL{0}".format(
-                        config.VALID.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL
-                    ),
                 ]
             )
         config.VALID.DATA.CACHED_PATH = os.path.join(
@@ -670,9 +664,6 @@ def update_config(config, args):
                 ),
                 "Median_face_box{0}".format(
                     config.TEST.DATA.PREPROCESS.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX
-                ),
-                "PSEUDO_LABEL{0}".format(
-                    config.TEST.DATA.PREPROCESS.USE_PSUEDO_PPG_LABEL
                 ),
             ]
         )
