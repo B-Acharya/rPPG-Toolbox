@@ -15,7 +15,10 @@ def _process_video(frames):
     """Calculates the average value of each frame."""
     RGB = []
     for frame in frames:
-        summation = np.sum(np.sum(frame, axis=0), axis=0)
+        if isinstance(frame, np.ndarray):
+            summation = np.sum(np.sum(frame, axis=0), axis=0)
+        else:
+            summation = np.sum(np.sum(frame.numpy(), axis=0), axis=0)
         RGB.append(summation / (frame.shape[0] * frame.shape[1]))
     return np.asarray(RGB)
 
