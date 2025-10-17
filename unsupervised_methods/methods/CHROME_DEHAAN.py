@@ -5,8 +5,6 @@ import numpy as np
 import math
 from scipy import signal
 
-import rPPG_Toolbox.unsupervised_methods.utils as utils
-
 
 def CHROME_DEHAAN(frames, FS):
     LPF = 0.7
@@ -40,7 +38,7 @@ def CHROME_DEHAAN(frames, FS):
 
         Alpha = np.std(Xf) / np.std(Yf)
         SWin = Xf - Alpha * Yf
-        SWin = np.multiply(SWin, signal.hanning(WinL))
+        SWin = np.multiply(SWin, signal.windows.hann(WinL))
 
         temp = SWin[: int(WinL // 2)]
         S[WinS:WinM] = S[WinS:WinM] + SWin[: int(WinL // 2)]
@@ -56,6 +54,10 @@ def process_video(frames):
     "Calculates the average value of each frame."
     RGB = []
     for frame in frames:
-        sum = np.sum(np.sum(frame, axis=0), axis=0)
+        if isinstance(frame, np.ndarray):
+            sum = np.sum(np.sum(frame, axis=0), axis=0)
+        else:
+            sum = np.sum(np.sum(frame.numpy(), axis=0), axis=0)
+
         RGB.append(sum / (frame.shape[0] * frame.shape[1]))
     return np.asarray(RGB)
