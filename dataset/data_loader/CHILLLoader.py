@@ -10,7 +10,7 @@ import h5py
 import random
 
 import numpy as np
-from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
+from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader, AlignSignals
 
 
 class CHILLLoader(BaseLoader):
@@ -53,7 +53,9 @@ class CHILLLoader(BaseLoader):
      -----------------
     """
 
-    def __init__(self, name, data_path, config_data, model, device, transform=None):
+    def __init__(
+        self, name, data_path, config_data, model, device, align=None, transform=None
+    ):
         """Initializes an UBFC dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -62,6 +64,12 @@ class CHILLLoader(BaseLoader):
             config_data(CfgNode): data settings(ref:config.py).
         """
         self.backend = config_data.PREPROCESS.CROP_FACE.BACKEND
+
+        if align is not None:
+            self.align_signals = AlignSignals(align, config_data.FS)
+        else:
+            self.align_signals = None
+
         super().__init__(name, data_path, config_data, model, device, transform)
 
     def get_raw_data(self, data_path):
@@ -159,6 +167,13 @@ class CHILLLoader(BaseLoader):
         frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
             frames, bvps, config_preprocess
         )
+
+        if self.align_signals is not None:
+            # this should replace the psuedo_clips with the aligned signals
+            # TODO: If the input is diffnormalized it has to be chaned back to the signal shifted and then diffnormalized again ?
+            aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
+                bvps, bvps_psuedo_clips
+            )
 
         input_name_list, label_name_list, label_psuedo_name_list = (
             self.save_multi_process(
