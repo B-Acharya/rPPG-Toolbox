@@ -65,7 +65,6 @@ class CHILLLoader(BaseLoader):
             name(string): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
         """
-        self.backend = config_data.PREPROCESS.CROP_FACE.BACKEND
 
         if align is not None:
             self.align_signals = AlignSignals(align, config_data.FS)

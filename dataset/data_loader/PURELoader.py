@@ -11,10 +11,12 @@ import glob
 import json
 import os
 import random
+from numpy.typing import NDArray
 
 import cv2
 import numpy as np
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
+from syncpos.utils.alignsignals import AlignSignals
 
 
 class PURELoader(BaseLoader):
@@ -22,7 +24,9 @@ class PURELoader(BaseLoader):
 
     num_of_participants = 10
 
-    def __init__(self, name, data_path, config_data, model, device, transform=None):
+    def __init__(
+        self, name, data_path, config_data, model, device, align=None, transform=None
+    ):
         """Initializes an PURE dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -43,7 +47,12 @@ class PURELoader(BaseLoader):
             name(str): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
         """
-        print("Loading pure dataset...")
+
+        if align is not None:
+            self.align_signals = AlignSignals(align, config_data.FS)
+        else:
+            self.align_signals = None
+
         super().__init__(name, data_path, config_data, model, device, transform)
         self.num_of_participants = 10
 
@@ -150,19 +159,72 @@ class PURELoader(BaseLoader):
 
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
-        # if config_preprocess.TRIM:
-        #     frames = frames[:1800]
-        #     bvps = bvps[:1800]
-        frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
-            frames, bvps, config_preprocess
-        )
 
-        input_name_list, label_name_list, label_psuedo_name_list = (
-            self.save_multi_process(
-                frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+        if self.align_signals is not None:
+            bvp_psuedo = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+
+            aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
+                bvps, bvp_psuedo
             )
-        )
+
+            print(f"start-> {video_start_idx}, end-> {video_end_idx}")
+
+            # create the synced video frames
+            frames = frames[video_start_idx:video_end_idx]
+
+            # aligned signals are preprocessed
+            frames_clips, bvps_aligned_clips, bvps_psuedo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+
+            # need similar preprocessing as the syncronized signal
+            chunk_length = config_preprocess.CHUNK_LENGTH
+            clip_num = frames.shape[0] // chunk_length
+            bvps_clips = self._preprocess_for_alignment(
+                bvps, config_preprocess, clip_num, chunk_length
+            )
+
+            #
+            input_name_list, label_name_list, label_psuedo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_aligned_clips, saved_filename
+                )
+            )
+
+        else:
+            frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+
+            input_name_list, label_name_list, label_psuedo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+                )
+            )
         file_list_dict[i] = input_name_list
+
+    @staticmethod
+    def _preprocess_for_alignment(
+        bvps, config_preprocess, clip_num: int, chunk_length: int
+    ) -> NDArray:
+        if config_preprocess.LABEL_TYPE == "Raw":
+            pass
+        elif config_preprocess.LABEL_TYPE == "DiffNormalized":
+            bvps = BaseLoader.diff_normalize_label(bvps)
+        elif config_preprocess.LABEL_TYPE == "Standardized":
+            bvps = BaseLoader.standardized_label(bvps)
+        else:
+            raise ValueError("Unsupported label type!")
+
+        if config_preprocess.DO_CHUNK:  # chunk data into snippets
+            bvps_clips = [
+                bvps[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+            ]
+            bvps_clips = np.array(bvps_clips)
+        else:
+            bvps_clips = np.array([bvps])
+
+        return bvps_clips
 
     @staticmethod
     def read_video(video_file):
