@@ -32,6 +32,7 @@ from torchvision import tv_tensors
 import random
 from scipy.signal import welch
 import torch
+
 # from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
 
 
@@ -418,6 +419,46 @@ class BaseLoader(Dataset):
         analytic_signal = signal.hilbert(pos_bvp)
         amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
         env_norm_bvp = pos_bvp / amplitude_envelope  # normalize by env
+
+        return np.array(env_norm_bvp)  # return POS psuedo labels
+
+    def generate_pos_uf(self, frames, fs=30):
+        """Generated POS-based PPG Psuedo Labels For Training
+
+        Args:
+            frames(List[array]): a video frames.
+            fs(int or float): Sampling rate of video
+        Returns:
+            env_norm_bvp: Hilbert envlope normalized POS PPG signal, filtered are HR frequency
+        """
+
+        # generate POS PPG signal
+        WinSec = 1.6
+        RGB = POS_WANG._process_video(frames)
+        N = RGB.shape[0]
+        H = np.zeros((1, N))
+        l = math.ceil(WinSec * fs)
+
+        for n in range(N):
+            m = n - l
+            if m >= 0:
+                Cn = np.true_divide(RGB[m:n, :], np.mean(RGB[m:n, :], axis=0))
+                Cn = np.mat(Cn).H
+                S = np.matmul(np.array([[0, 1, -1], [-2, 1, 1]]), Cn)
+                h = S[0, :] + (np.std(S[0, :]) / np.std(S[1, :])) * S[1, :]
+                mean_h = np.mean(h)
+                for temp in range(h.shape[1]):
+                    h[0, temp] = h[0, temp] - mean_h
+                H[0, m:n] = H[0, m:n] + (h[0])
+
+        bvp = H
+        bvp = utils.detrend(np.mat(bvp).H, 100)
+        bvp = np.asarray(np.transpose(bvp))[0]
+
+        # apply hilbert normalization to normalize PPG amplitude
+        analytic_signal = signal.hilbert(bvp)
+        amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
+        env_norm_bvp = bvp / amplitude_envelope  # normalize by env
 
         return np.array(env_norm_bvp)  # return POS psuedo labels
 

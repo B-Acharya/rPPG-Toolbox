@@ -56,7 +56,16 @@ class CHILLLoader(BaseLoader):
     """
 
     def __init__(
-        self, name, data_path, config_data, model, device, align=None, transform=None
+        self,
+        name,
+        data_path,
+        config_data,
+        model,
+        device,
+        sensor_type=None,
+        align=None,
+        psuedo_label_type=None,
+        transform=None,
     ):
         """Initializes an UBFC dataloader.
         Args:
@@ -70,6 +79,8 @@ class CHILLLoader(BaseLoader):
             self.align_signals = AlignSignals(align, config_data.FS)
         else:
             self.align_signals = None
+
+        self.psuedo_label_type = psuedo_label_type
 
         super().__init__(name, data_path, config_data, model, device, transform)
 
@@ -203,6 +214,21 @@ class CHILLLoader(BaseLoader):
             frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
                 frames, bvps, config_preprocess
             )
+
+            if self.psuedo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate psuedo_labels")
+                bvps_psuedo_clips = self.generate_pos_uf(frames, fs=self.fs)
+
+                # need similar preprocessing as the pseudo signal
+
+                chunk_length = config_preprocess.CHUNK_LENGTH
+                clip_num = frames.shape[0] // chunk_length
+
+                bvps_psuedo_clips = self._preprocess_for_alignment(
+                    bvps_psuedo_clips, config_preprocess, clip_num, chunk_length
+                )
+            else:
+                pass
 
             input_name_list, label_name_list, label_psuedo_name_list = (
                 self.save_multi_process(
