@@ -825,6 +825,7 @@ class BaseLoader(Dataset):
         input_path_name_list = []
         label_path_name_list = []
         label_psuedo_path_name_list = []
+        print(f"saving filename:{filename}")
         if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
@@ -878,7 +879,7 @@ class BaseLoader(Dataset):
             )
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=8
+        self, data_dirs, config_preprocess, multi_process_quota=1
     ):
         """Allocate dataset preprocessing across multiple processes with status monitoring.
 

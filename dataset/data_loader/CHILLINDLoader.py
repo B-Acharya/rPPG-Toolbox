@@ -7,9 +7,6 @@ Details for the MBP-PPG Dataset see .
 import os
 from pathlib import Path
 import pandas as pd
-import pathlib
-from re import U
-import h5py
 import random
 from numpy.typing import NDArray
 from typing import List
@@ -119,7 +116,6 @@ class CHILLINDLoader(BaseLoader):
         ]
 
         for participant_path in participants_paths:
-
             participant = participant_path.stem
 
             for hr_condition in self.hr_conditions:
@@ -133,7 +129,7 @@ class CHILLINDLoader(BaseLoader):
                     unique_id = f"{participant}_{hr_condition}_{illu_condition}"
                     data_dirs.append(
                         {
-                            "index": hash(unique_id),  # Unique numeric identifier
+                            "index": unique_id,  # Unique numeric identifier
                             "path": str(Path(csv_file).parent),
                             "subject": participant,
                             "csv_path": csv_file,
@@ -224,7 +220,9 @@ class CHILLINDLoader(BaseLoader):
         csv_path = data_dirs[i]["csv_path"]
 
         # Read and sort TIFF sequence
-        sync_data = pd.read_csv(csv_path)
+        sync_data = pd.read_csv(
+            csv_path, header=0, names=["Timestamps", "paths", "bvps"]
+        )
         print(sync_data.columns)
         image_paths = sync_data["paths"]
 
@@ -254,10 +252,7 @@ class CHILLINDLoader(BaseLoader):
             )
 
         # Process signals
-        if config_preprocess.USE_PSEUDO_PPG_LABEL:
-            bvps = self.generate_pos_psuedo_labels(frames, self.config_data.FS)
-        else:
-            bvps = self.read_wave(sync_data, self.sensor_type)
+        bvps = self.read_wave(sync_data, self.sensor_type)
 
         target_length = frames.shape[0]
 
@@ -265,7 +260,6 @@ class CHILLINDLoader(BaseLoader):
         bvps = BaseLoader.resample_ppg(bvps, target_length)
 
         if self.align_signals is not None:
-
             bvp_psuedo = self.generate_pos_psuedo_labels(frames, fs=self.fs)
 
             aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
@@ -296,7 +290,6 @@ class CHILLINDLoader(BaseLoader):
             )
 
         else:
-
             frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
                 frames, bvps, config_preprocess
             )
@@ -363,11 +356,6 @@ class CHILLINDLoader(BaseLoader):
     @staticmethod
     def read_wave(bvp_file, sensor_type):
         """Reads a bvp signal file."""
-        if sensor_type == "A188":
-            bvps = bvp_file["Shimmer_A188"].values.astype(np.float32)
-        elif sensor_type == "A543":
-            bvps = bvp_file["Shimmer_A543"].values.astype(np.float32)
-        else:
-            raise NotImplementedError(f"Wrong {sensor_type}")
+        bvps = bvp_file["bvps"].values.astype(np.float32)
 
         return bvps
