@@ -64,7 +64,7 @@ class CHILLLoader(BaseLoader):
         device,
         sensor_type=None,
         align=None,
-        psuedo_label_type=None,
+        pseudo_label_type=None,
         transform=None,
     ):
         """Initializes an UBFC dataloader.
@@ -80,7 +80,7 @@ class CHILLLoader(BaseLoader):
         else:
             self.align_signals = None
 
-        self.psuedo_label_type = psuedo_label_type
+        self.pseudo_label_type = pseudo_label_type
 
         super().__init__(name, data_path, config_data, model, device, transform)
 
@@ -164,6 +164,7 @@ class CHILLLoader(BaseLoader):
         video_path = data_dirs[i]["path"]
         setting = saved_filename[-1]
         # different setting have different file names
+        # TODO: This is hidden way to enforce face cropped input, should be made explicit from the entry. Update how the face cropper saves the output.
         video_filename = "faces_yolo_data.hdf5"
         print(
             "os path exists", os.path.exists(os.path.join(video_path, video_filename))
@@ -177,12 +178,12 @@ class CHILLLoader(BaseLoader):
         bvps = BaseLoader.resample_ppg(bvps, target_length)
 
         if self.align_signals is not None:
-            # generate the psuedo_labels
+            # generate the pseudo_labels
             # These are hilbert envelopes , TODO: Maybe use the genreal algo to extract the signal
-            bvp_psuedo = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+            bvp_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
 
             aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
-                bvps, bvp_psuedo
+                bvps, bvp_pseudo
             )
 
             print(f"start-> {video_start_idx}, end-> {video_end_idx}")
@@ -191,7 +192,7 @@ class CHILLLoader(BaseLoader):
             frames = frames[video_start_idx:video_end_idx]
 
             # aligned signals are preprocessed
-            frames_clips, bvps_aligned_clips, bvps_psuedo_clips = self.preprocess(
+            frames_clips, bvps_aligned_clips, bvps_pseudo_clips = self.preprocess(
                 frames, bvps, config_preprocess
             )
 
@@ -203,7 +204,7 @@ class CHILLLoader(BaseLoader):
             )
 
             #
-            input_name_list, label_name_list, label_psuedo_name_list = (
+            input_name_list, label_name_list, label_pseudo_name_list = (
                 self.save_multi_process(
                     frames_clips, bvps_clips, bvps_aligned_clips, saved_filename
                 )
@@ -211,28 +212,26 @@ class CHILLLoader(BaseLoader):
 
         else:
             # the data is preprocessed if align signals is none
-            frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
+            frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
                 frames, bvps, config_preprocess
             )
 
-            if self.psuedo_label_type == "POS_UF":
-                print("Using unfiltered POS to generate psuedo_labels")
-                bvps_psuedo_clips = self.generate_pos_uf(frames, fs=self.fs)
+            if self.pseudo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate pseudo_labels")
+                bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
 
                 # need similar preprocessing as the pseudo signal
 
                 chunk_length = config_preprocess.CHUNK_LENGTH
                 clip_num = frames.shape[0] // chunk_length
 
-                bvps_psuedo_clips = self._preprocess_for_alignment(
-                    bvps_psuedo_clips, config_preprocess, clip_num, chunk_length
+                bvps_pseudo_clips = self._preprocess_for_alignment(
+                    bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
                 )
-            else:
-                pass
 
-            input_name_list, label_name_list, label_psuedo_name_list = (
+            input_name_list, label_name_list, label_pseudo_name_list = (
                 self.save_multi_process(
-                    frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+                    frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
                 )
             )
 

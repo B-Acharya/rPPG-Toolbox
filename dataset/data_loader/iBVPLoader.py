@@ -121,7 +121,7 @@ class iBVPLoader(BaseLoader):
 
         # Read Labels
         if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            bvps = self.generate_pos_psuedo_labels(frames, fs=self.config_data.FS)
+            bvps = self.generate_pos_pseudo_labels(frames, fs=self.config_data.FS)
         else:
             bvps, sq_vec = self.read_wave(
                 os.path.join(data_dirs[i]['path'], "{0}_bvp.csv".format(filename)))

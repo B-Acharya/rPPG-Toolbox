@@ -112,7 +112,7 @@ class BaseLoader(Dataset):
         """
         self.inputs = list()
         self.labels = list()
-        self.labels_psuedo = list()
+        self.labels_pseudo = list()
         self.dataset_name = dataset_name
         self.infer_dataset = config_data.DATASET
         self.raw_data_path = raw_data_path
@@ -150,6 +150,8 @@ class BaseLoader(Dataset):
         assert config_data.END < 1 or config_data.END == 1
         if config_data.DO_PREPROCESS:
             self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
+            print(f"\n[Preprocessing] Preprocessed files will be saved to: {self.cached_path}")
+            print(f"[Preprocessing] File list will be written to:         {self.file_list_path}\n")
             self.preprocess_dataset(
                 self.raw_data_dirs,
                 config_data.PREPROCESS,
@@ -193,14 +195,14 @@ class BaseLoader(Dataset):
         """Returns a clip of video(3,T,W,H) and it's corresponding signals(T)."""
         data = np.load(self.inputs[index])
         label = np.load(self.labels[index])
-        label_psuedo = np.load(self.labels_psuedo[index])
+        label_pseudo = np.load(self.labels_pseudo[index])
 
         # Converstion for handling augmenatations
         data = torch.from_numpy(data).float()
         data = tv_tensors.Video(data)
 
         label = torch.from_numpy(label).float()
-        label_psuedo = torch.from_numpy(label_psuedo).float()
+        label_pseudo = torch.from_numpy(label_pseudo).float()
 
         # Transform expect the input to be T, C, H, W
         data = data.permute(0, 3, 1, 2)
@@ -223,7 +225,7 @@ class BaseLoader(Dataset):
             raise ValueError("Unsupported Data Format!")
         # data = np.float32(data)
         # label = np.float32(label)
-        # label_psuedo = np.float32(label_psuedo)
+        # label_pseudo = np.float32(label_pseudo)
 
         # item_path is the location of a specific clip in a preprocessing output folder
         # For example, an item path could be /home/data/PURE_SizeW72_...unsupervised/501_input0.npy
@@ -259,7 +261,7 @@ class BaseLoader(Dataset):
                 clip_average_HR,
             )
 
-        return data, label, filename, chunk_id, label_psuedo
+        return data, label, filename, chunk_id, label_pseudo
 
     def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
         clip_frames = data.shape[0]  # 160
@@ -373,7 +375,7 @@ class BaseLoader(Dataset):
             )
         return np.asarray(processed_frames)
 
-    def generate_pos_psuedo_labels(self, frames, fs=30):
+    def generate_pos_pseudo_labels(self, frames, fs=30):
         """Generated POS-based PPG Psuedo Labels For Training
 
         Args:
@@ -420,7 +422,7 @@ class BaseLoader(Dataset):
         amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
         env_norm_bvp = pos_bvp / amplitude_envelope  # normalize by env
 
-        return np.array(env_norm_bvp)  # return POS psuedo labels
+        return np.array(env_norm_bvp)  # return POS pseudo labels
 
     def generate_pos_uf(self, frames, fs=30):
         """Generated POS-based PPG Psuedo Labels For Training
@@ -460,7 +462,7 @@ class BaseLoader(Dataset):
         amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
         env_norm_bvp = bvp / amplitude_envelope  # normalize by env
 
-        return np.array(env_norm_bvp)  # return POS psuedo labels
+        return np.array(env_norm_bvp)  # return POS pseudo labels
 
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
@@ -537,7 +539,7 @@ class BaseLoader(Dataset):
         # print("data shape", data.shape)
 
         print("Generating PSUEDO labaels")
-        bvps_psuedo = self.generate_pos_psuedo_labels(frames, fs=self.fs)
+        bvps_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
 
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
@@ -546,13 +548,13 @@ class BaseLoader(Dataset):
                 pass
             else:
                 bvps = BaseLoader.diff_normalize_label(bvps)
-                bvps_psuedo = BaseLoader.diff_normalize_label(bvps_psuedo)
+                bvps_pseudo = BaseLoader.diff_normalize_label(bvps_pseudo)
         elif config_preprocess.LABEL_TYPE == "Standardized":
             if self.infer_dataset == "DST":
                 pass
             else:
                 bvps = BaseLoader.standardized_label(bvps)
-                bvps_psuedo = BaseLoader.standardized_label(bvps_psuedo)
+                bvps_pseudo = BaseLoader.standardized_label(bvps_pseudo)
         else:
             raise ValueError("Unsupported label type!")
 
@@ -560,15 +562,15 @@ class BaseLoader(Dataset):
             frames_clips, bvps_clips = self.chunk(
                 data, bvps, config_preprocess.CHUNK_LENGTH
             )
-            _, bvps_psuedo_clips = self.chunk(
-                data, bvps_psuedo, config_preprocess.CHUNK_LENGTH
+            _, bvps_pseudo_clips = self.chunk(
+                data, bvps_pseudo, config_preprocess.CHUNK_LENGTH
             )
         else:
             frames_clips = np.array([data])
             bvps_clips = np.array([bvps])
-            bvps_psuedo_clips = np.array([bvps_psuedo])
+            bvps_pseudo_clips = np.array([bvps_pseudo])
 
-        return frames_clips, bvps_clips, bvps_psuedo_clips
+        return frames_clips, bvps_clips, bvps_pseudo_clips
 
     def face_detection(self, frame, backend, use_larger_box=False, larger_box_coef=1.0):
         """Face detection on a single frame.
@@ -824,7 +826,7 @@ class BaseLoader(Dataset):
         count = 0
         input_path_name_list = []
         label_path_name_list = []
-        label_psuedo_path_name_list = []
+        label_pseudo_path_name_list = []
         print(f"saving filename:{filename}")
         if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
@@ -859,23 +861,23 @@ class BaseLoader(Dataset):
                     + os.sep
                     + "{0}_label{1}.npy".format(filename, str(count))
                 )
-                label_psuedo_path_name = (
+                label_pseudo_path_name = (
                     self.cached_path
                     + os.sep
-                    + "{0}_label_psuedo{1}.npy".format(filename, str(count))
+                    + "{0}_label_pseudo{1}.npy".format(filename, str(count))
                 )
 
                 input_path_name_list.append(input_path_name)
                 label_path_name_list.append(label_path_name)
-                label_psuedo_path_name_list.append(label_psuedo_path_name)
+                label_pseudo_path_name_list.append(label_pseudo_path_name)
                 np.save(input_path_name, frames_clips[i])
                 np.save(label_path_name, bvps_clips[i])
-                np.save(label_psuedo_path_name, bvps_clips_pseudo[i])
+                np.save(label_pseudo_path_name, bvps_clips_pseudo[i])
                 count += 1
             return (
                 input_path_name_list,
                 label_path_name_list,
-                label_psuedo_path_name_list,
+                label_pseudo_path_name_list,
             )
 
     def multi_process_manager(
@@ -1112,13 +1114,13 @@ class BaseLoader(Dataset):
             raise ValueError(self.dataset_name + " dataset loading data error!")
         inputs = sorted(inputs)  # sort input file name list
         labels = [input_file.replace("input", "label") for input_file in inputs]
-        labels_psuedo = [
-            input_file.replace("input", "label_psuedo") for input_file in inputs
+        labels_pseudo = [
+            input_file.replace("input", "label_pseudo") for input_file in inputs
         ]
 
         self.inputs = inputs
         self.labels = labels
-        self.labels_psuedo = labels_psuedo
+        self.labels_pseudo = labels_pseudo
         self.preprocessed_data_len = len(inputs)
 
     @staticmethod

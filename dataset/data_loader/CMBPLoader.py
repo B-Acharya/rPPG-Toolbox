@@ -165,13 +165,13 @@ class CMBPLoader(BaseLoader):
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
 
-        frames_clips, bvps_clips, bvps_psuedo_clips = self.preprocess(
+        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
             frames, bvps, config_preprocess
         )
 
-        input_name_list, label_name_list, label_psuedo_name_list = (
+        input_name_list, label_name_list, label_pseudo_name_list = (
             self.save_multi_process(
-                frames_clips, bvps_clips, bvps_psuedo_clips, saved_filename
+                frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
             )
         )
         file_list_dict[i] = input_name_list

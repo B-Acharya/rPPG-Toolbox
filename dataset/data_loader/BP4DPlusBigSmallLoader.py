@@ -266,7 +266,7 @@ class BP4DPlusBigSmallLoader(BaseLoader):
 
         # CONSTRUCT DATA DICTIONARY FOR VIDEO TRIAL
         data_dict = self.construct_data_dict(data_dir_info, config_data) # construct a dictionary of ALL labels and video frames (of equal length)
-        data_dict = self.generate_pos_psuedo_labels(data_dict, fs=config_data.FS)
+        data_dict = self.generate_pos_pseudo_labels(data_dict, fs=config_data.FS)
         
         # SEPERATE DATA INTO VIDEO FRAMES AND LABELS ARRAY
         frames = self.read_video(data_dict) # read in the video frames
@@ -284,7 +284,7 @@ class BP4DPlusBigSmallLoader(BaseLoader):
 
 
 
-    def generate_pos_psuedo_labels(self, data_dict, fs=30):
+    def generate_pos_pseudo_labels(self, data_dict, fs=30):
         """Generated POS-based PPG Psuedo Labels For Training
 
         Args:
@@ -345,7 +345,7 @@ class BP4DPlusBigSmallLoader(BaseLoader):
         data_dict['pos_bvp'] = pos_bvp
         data_dict['pos_env_norm_bvp'] = env_norm_bvp
 
-        return data_dict # return data dict w/ POS psuedo labels
+        return data_dict # return data dict w/ POS pseudo labels
 
 
 
@@ -579,7 +579,7 @@ class BP4DPlusBigSmallLoader(BaseLoader):
         keys.remove('X') # remove X from the processed keys (not a label)
 
         # Init labels array
-        labels = np.ones((data_len, 49)) # 47 tasks from original dataset, and added psuedo labels: 'pos_bvp','pos_env_norm_bvp'
+        labels = np.ones((data_len, 49)) # 47 tasks from original dataset, and added pseudo labels: 'pos_bvp','pos_env_norm_bvp'
         labels = -1*labels # make all values -1 originally
 
         # LABELS BY INDEX IN OUTPUT LABELS NPY ARRAY

@@ -227,9 +227,9 @@ class BP4DPlusLoader(BaseLoader):
     def read_wave(self, data_dir, config_preprocess, frames):
         """Reads a bvp signal file."""
 
-        # generate PPG psuedo labels
+        # generate PPG pseudo labels
         if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            label = self.generate_pos_psuedo_labels(frames, fs=25)
+            label = self.generate_pos_pseudo_labels(frames, fs=25)
 
         # read in physiological labels txt file data
         else:
