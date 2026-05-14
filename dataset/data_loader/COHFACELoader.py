@@ -13,6 +13,7 @@ import random
 import cv2
 import h5py
 import numpy as np
+from syncpos.utils.alignsignals import AlignSignals
 
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
@@ -20,7 +21,17 @@ from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 class COHFACELoader(BaseLoader):
     """The data loader for the COHFACE dataset."""
 
-    def __init__(self, name, data_path, config_data, model):
+    def __init__(
+            self,
+            name,
+            data_path,
+            config_data,
+            model,
+            device,
+            align=None,
+            sensor_type=None,  # Added to match the same path to all the datasets
+            pseudo_label_type=None,
+            transform=None,):
         """Initializes an COHFACE dataloader.
         Args:
             data_path(str): path of a folder which stores raw video and bvp data.
@@ -48,6 +59,11 @@ class COHFACELoader(BaseLoader):
             name(str): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
         """
+        if align is not None:
+            self.align_signals = AlignSignals(align, config_data.FS)
+        else:
+            self.align_signals = None
+
         if name == "train":
             self.split_path = config_data.SPLIT_PATH
         elif name == "valid":
@@ -88,17 +104,20 @@ class COHFACELoader(BaseLoader):
 
         else:
             data_dirs = glob.glob(data_path + os.sep + "*")
+            print("data_dirs:", data_dirs)
             for data_dir in data_dirs:
                 for i in range(4):
                     subject = os.path.split(data_dir)[-1]
-                    dirs.append(
-                        {
-                            "index": int("{0}0{1}".format(subject, i)),
-                            "path": os.path.join(data_dir, str(i)),
-                        }
-                    )
+                    if subject.isnumeric():
+                        dirs.append(
+                            {
+                                "index": int("{0}0{1}".format(subject, i)),
+                                "path": os.path.join(data_dir, str(i)),
+                            }
+                        )
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
+
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
@@ -155,15 +174,17 @@ class COHFACELoader(BaseLoader):
         """Preprocesses the raw data."""
         filename = os.path.split(data_dirs[i]["path"])[-1]
         saved_filename = data_dirs[i]["index"]
-        frames = self.read_video(data_dirs[i]["path"] + ".avi")
-        bvps = self.read_wave(data_dirs[i]["path"] + ".hdf5")
+        print("saved filename", saved_filename)
+        print(data_dirs[i])
+        frames = self.read_video(os.path.join(data_dirs[i]["path"], "data.avi"))
+        bvps = self.read_wave(os.path.join(data_dirs[i]["path"], "data.hdf5"))
         print(frames.shape)
         print(data_dirs[i]["path"])
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        input_name_list, label_name_list = self.save_multi_process(
-            frames_clips, bvps_clips, saved_filename
+        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(frames, bvps, config_preprocess)
+        input_name_list, label_name_list, _ = self.save_multi_process(
+            frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
         )
         file_list_dict[i] = input_name_list
 
