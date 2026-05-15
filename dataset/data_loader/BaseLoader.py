@@ -106,12 +106,12 @@ class BaseLoader(Dataset):
         # item_path_filename is simply the filename of the specific clip
         # For example, the preceding item_path's filename would be 501_input0.npy
         item_path_filename = item_path.split(os.sep)[-1]
-        # split_idx represents the point in the previous filename where we want to split the string 
+        # split_idx represents the point in the previous filename where we want to split the string
         # in order to retrieve a more precise filename (e.g., 501) preceding the chunk (e.g., input0)
         split_idx = item_path_filename.rindex('_')
         # Following the previous comments, the filename for example would be 501
         filename = item_path_filename[:split_idx]
-        # chunk_id is the extracted, numeric chunk identifier. Following the previous comments, 
+        # chunk_id is the extracted, numeric chunk identifier. Following the previous comments,
         # the chunk_id for example would be 0
         chunk_id = item_path_filename[split_idx + 6:].split('.')[0]
         return data, label, filename, chunk_id
@@ -125,7 +125,7 @@ class BaseLoader(Dataset):
         raise Exception("'get_raw_data' Not Implemented")
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values, 
+        """Returns a subset of data dirs, split with begin and end values,
         and ensures no overlapping subjects between splits.
 
         Args:
@@ -188,12 +188,12 @@ class BaseLoader(Dataset):
         pos_bvp = signal.filtfilt(b, a, bvp.astype(np.double))
 
         # apply hilbert normalization to normalize PPG amplitude
-        analytic_signal = signal.hilbert(pos_bvp) 
+        analytic_signal = signal.hilbert(pos_bvp)
         amplitude_envelope = np.abs(analytic_signal) # derive envelope signal
         env_norm_bvp = pos_bvp/amplitude_envelope # normalize by env
 
         return np.array(env_norm_bvp) # return POS psuedo labels
-    
+
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
 
@@ -203,9 +203,9 @@ class BaseLoader(Dataset):
             begin(float): index of begining during train/val split.
             end(float): index of ending during train/val split.
         """
-        data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset 
+        data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset
         # send data directories to be processed
-        file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess) 
+        file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess)
         self.build_file_list(file_list_dict)  # build file list
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
         print("Total Number of raw files preprocessed:", len(data_dirs_split), end='\n\n')
@@ -246,16 +246,26 @@ class BaseLoader(Dataset):
             else:
                 raise ValueError("Unsupported data type!")
         data = np.concatenate(data, axis=-1)  # concatenate all channels
+        print("data shape", data.shape)
+
+        print("Generating PSUEDO labaels")
+        bvps_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
+
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
-            bvps = BaseLoader.diff_normalize_label(bvps)
+            if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+                pass
+            else:
+                bvps = BaseLoader.diff_normalize_label(bvps)
+                bvps_pseudo = BaseLoader.diff_normalize_label(bvps_pseudo)
         elif config_preprocess.LABEL_TYPE == "Standardized":
             bvps = BaseLoader.standardized_label(bvps)
         else:
             raise ValueError("Unsupported label type!")
 
-        if config_preprocess.DO_CHUNK:  # chunk data into snippets
+        # TODO: Ask what chunking is used for. For RAVDESS this returned in 0 frame clips
+        if config_preprocess.DO_CHUNK and not self.infer_dataset == "RAVDESS" :  # chunk data into snippets
             frames_clips, bvps_clips = self.chunk(
                 data, bvps, config_preprocess.CHUNK_LENGTH)
         else:
@@ -308,7 +318,7 @@ class BaseLoader(Dataset):
                 face_zone = highest_score_face['facial_area']
 
                 # This implementation of RetinaFace returns a face_zone in the
-                # form [x_min, y_min, x_max, y_max] that corresponds to the 
+                # form [x_min, y_min, x_max, y_max] that corresponds to the
                 # corners of a face zone
                 x_min, y_min, x_max, y_max = face_zone
 
@@ -322,10 +332,10 @@ class BaseLoader(Dataset):
                 # Find the center of the face zone
                 center_x = x + width // 2
                 center_y = y + height // 2
-                
+
                 # Determine the size of the square (use the maximum of width and height)
                 square_size = max(width, height)
-                
+
                 # Calculate the new coordinates for a square face zone
                 new_x = center_x - (square_size // 2)
                 new_y = center_y - (square_size // 2)
@@ -343,7 +353,7 @@ class BaseLoader(Dataset):
             face_box_coor[3] = larger_box_coef * face_box_coor[3]
         return face_box_coor
 
-    def crop_face_resize(self, frames, use_face_detection, backend, use_larger_box, larger_box_coef, use_dynamic_detection, 
+    def crop_face_resize(self, frames, use_face_detection, backend, use_larger_box, larger_box_coef, use_dynamic_detection,
                          detection_freq, use_median_box, width, height):
         """Crop face and resize frames.
 
@@ -409,9 +419,32 @@ class BaseLoader(Dataset):
             bvp_clips: all chunks of bvp frames
         """
 
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+            label_frame_size = len(bvps)
+            if label_frame_size > 25000 and label_frame_size < 30000:
+                sampling_rate = 300
+            else:
+                sampling_rate = 1000
+
+            chunk_length_ecg = (chunk_length // self.fs) * sampling_rate
+            clip_num_ecg = bvps.shape[0] // chunk_length_ecg
+
         clip_num = frames.shape[0] // chunk_length
-        frames_clips = [frames[i * chunk_length:(i + 1) * chunk_length] for i in range(clip_num)]
-        bvps_clips = [bvps[i * chunk_length:(i + 1) * chunk_length] for i in range(clip_num)]
+        frames_clips = [
+            frames[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+        ]
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+            bvps_clips = [
+                bvps[i * chunk_length_ecg : (i + 1) * chunk_length_ecg]
+                for i in range(clip_num_ecg)
+            ]
+            print(clip_num_ecg, clip_num)
+            print(chunk_length_ecg, chunk_length, sampling_rate)
+        else:
+            bvps_clips = [
+                bvps[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+            ]
+
         return np.array(frames_clips), np.array(bvps_clips)
 
     def save(self, frames_clips, bvps_clips, filename):
@@ -455,16 +488,59 @@ class BaseLoader(Dataset):
         count = 0
         input_path_name_list = []
         label_path_name_list = []
-        for i in range(len(bvps_clips)):
-            assert (len(self.inputs) == len(self.labels))
-            input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
-            label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
-            input_path_name_list.append(input_path_name)
-            label_path_name_list.append(label_path_name)
-            np.save(input_path_name, frames_clips[i])
-            np.save(label_path_name, bvps_clips[i])
-            count += 1
-        return input_path_name_list, label_path_name_list
+        label_pseudo_path_name_list = []
+        print(f"saving filename:{filename}")
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+            for i in range(len(frames_clips)):
+                assert len(self.inputs) == len(self.labels), "Not processing this video"
+                input_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_input{1}.npy".format(filename, str(count))
+                )
+                input_path_name_list.append(input_path_name)
+                label_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_label{1}.npy".format(filename, str(count))
+                )
+                label_path_name_list.append(label_path_name)
+                np.save(label_path_name, bvps_clips)
+                np.save(input_path_name, frames_clips[i])
+                count += 1
+            return input_path_name_list, label_path_name_list
+
+        else:
+            for i in range(len(bvps_clips)):
+                assert len(self.inputs) == len(self.labels), "Not processing this video"
+                input_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_input{1}.npy".format(filename, str(count))
+                )
+                label_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_label{1}.npy".format(filename, str(count))
+                )
+                label_pseudo_path_name = (
+                    self.cached_path
+                    + os.sep
+                    + "{0}_label_pseudo{1}.npy".format(filename, str(count))
+                )
+
+                input_path_name_list.append(input_path_name)
+                label_path_name_list.append(label_path_name)
+                label_pseudo_path_name_list.append(label_pseudo_path_name)
+                np.save(input_path_name, frames_clips[i])
+                np.save(label_path_name, bvps_clips[i])
+                np.save(label_pseudo_path_name, bvps_clips_pseudo[i])
+                count += 1
+            return (
+                input_path_name_list,
+                label_path_name_list,
+                label_pseudo_path_name_list,
+            )
 
     def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
         """Allocate dataset preprocessing across multiple processes.
@@ -493,7 +569,7 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    p = Process(target=self.preprocess_dataset_subprocess, 
+                    p = Process(target=self.preprocess_dataset_subprocess,
                                 args=(data_dirs,config_preprocess, i, file_list_dict))
                     p.start()
                     p_list.append(p)
@@ -514,7 +590,7 @@ class BaseLoader(Dataset):
         return file_list_dict
 
     def build_file_list(self, file_list_dict):
-        """Build a list of files used by the dataloader for the data split. Eg. list of files used for 
+        """Build a list of files used by the dataloader for the data split. Eg. list of files used for
         train / val / test. Also saves the list to a .csv file.
 
         Args:
@@ -535,8 +611,8 @@ class BaseLoader(Dataset):
         file_list_df.to_csv(self.file_list_path)  # save file list to .csv
 
     def build_file_list_retroactive(self, data_dirs, begin, end):
-        """ If a file list has not already been generated for a specific data split build a list of files 
-        used by the dataloader for the data split. Eg. list of files used for 
+        """ If a file list has not already been generated for a specific data split build a list of files
+        used by the dataloader for the data split. Eg. list of files used for
         train / val / test. Also saves the list to a .csv file.
 
         Args:
