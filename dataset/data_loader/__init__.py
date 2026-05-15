@@ -5,3 +5,4 @@ import rPPG_Toolbox.dataset.data_loader.MMPDLoader
 import rPPG_Toolbox.dataset.data_loader.CMBPLoader
 import rPPG_Toolbox.dataset.data_loader.CHILLLoader
 import rPPG_Toolbox.dataset.data_loader.CHILLINDLoader
+import rPPG_Toolbox.dataset.data_loader.RAVDESSLoader

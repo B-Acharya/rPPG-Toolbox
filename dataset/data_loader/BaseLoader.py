@@ -536,7 +536,7 @@ class BaseLoader(Dataset):
             else:
                 raise ValueError("Unsupported data type!")
         data = np.concatenate(data, axis=-1)  # concatenate all channels
-        # print("data shape", data.shape)
+        print("data shape", data.shape)
 
         print("Generating PSUEDO labaels")
         bvps_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
@@ -544,7 +544,7 @@ class BaseLoader(Dataset):
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
-            if self.infer_dataset == "DST":
+            if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
                 pass
             else:
                 bvps = BaseLoader.diff_normalize_label(bvps)
@@ -558,7 +558,8 @@ class BaseLoader(Dataset):
         else:
             raise ValueError("Unsupported label type!")
 
-        if config_preprocess.DO_CHUNK:  # chunk data into snippets
+        # TODO: Ask what chunking is used for. For RAVDESS this returned in 0 frame clips
+        if config_preprocess.DO_CHUNK and not self.infer_dataset == "RAVDESS" :  # chunk data into snippets
             frames_clips, bvps_clips = self.chunk(
                 data, bvps, config_preprocess.CHUNK_LENGTH
             )
@@ -749,7 +750,7 @@ class BaseLoader(Dataset):
             bvp_clips: all chunks of bvp frames
         """
 
-        if self.infer_dataset == "DST":
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
             label_frame_size = len(bvps)
             if label_frame_size > 25000 and label_frame_size < 30000:
                 sampling_rate = 300
@@ -763,7 +764,7 @@ class BaseLoader(Dataset):
         frames_clips = [
             frames[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
         ]
-        if self.infer_dataset == "DST":
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
             bvps_clips = [
                 bvps[i * chunk_length_ecg : (i + 1) * chunk_length_ecg]
                 for i in range(clip_num_ecg)
@@ -828,7 +829,7 @@ class BaseLoader(Dataset):
         label_path_name_list = []
         label_pseudo_path_name_list = []
         print(f"saving filename:{filename}")
-        if self.infer_dataset == "DST":
+        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
             for i in range(len(frames_clips)):
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
                 input_path_name = (

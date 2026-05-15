@@ -1,11 +1,3 @@
-"""The dataloader for COHFACE datasets.
-
-Details for the COHFACE Dataset see https://www.idiap.ch/en/dataset/cohface
-If you use this dataset, please cite the following publication:
-Guillaume Heusch, André Anjos, Sébastien Marcel, “A reproducible study on remote heart rate measurement”, arXiv, 2016.
-http://publications.idiap.ch/index.php/publications/show/3688
-"""
-
 import glob
 import os
 import random
@@ -17,9 +9,8 @@ from syncpos.utils.alignsignals import AlignSignals
 
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
-
-class COHFACELoader(BaseLoader):
-    """The data loader for the COHFACE dataset."""
+class RAVDESSLoader(BaseLoader):
+    """The RAVDESS data loader"""
 
     def __init__(
             self,
@@ -32,29 +23,18 @@ class COHFACELoader(BaseLoader):
             sensor_type=None,  # Added to match the same path to all the datasets
             pseudo_label_type=None,
             transform=None,):
-        """Initializes an COHFACE dataloader.
+        """Initializes a RAVDESS dataloader.
         Args:
-            data_path(str): path of a folder which stores raw video and bvp data.
+            data_path(str): path of a folder which stores raw video.
             e.g. data_path should be "RawData" for below dataset structure:
             -----------------
                  RawData/
-                 |   |-- 1/
-                 |      |-- 0/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |      |...
-                 |      |-- 3/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |...
-                 |   |-- n/
-                 |      |-- 0/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |      |...
-                 |      |-- 3/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
+                 |   |-- Actor_01/
+                 |      |-- 01-02-01-01-01-01-01/
+                 |         |-- 01-02-01-01-01-01-01.mp4
+                 |      |-- 01-02-01-01-01-02-01/
+                 |         |-- 01-02-01-01-01-01-02.mp4
+                 |   |-- Actor_02/
             -----------------
             name(str): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
@@ -78,53 +58,30 @@ class COHFACELoader(BaseLoader):
         else:
             self.use_predefined_splits = True
 
+        self.pseudo_label_type = pseudo_label_type
+
         super().__init__(name, data_path, config_data, model)
 
-    def _read_split_path(self):
-        data_paths = []
-        with open(self.split_path, "r") as f:
-            for line in f.readlines():
-                data_paths.append(self.raw_data_path + line.strip())
-        return data_paths
-
     def get_raw_data(self, data_path):
-        """Returns data directories under the path(For COHFACE dataset)."""
         dirs = list()
-        if self.use_predefined_splits:
-            data_dirs = self._read_split_path()
-            for data_dir in data_dirs:
-                subject = data_dir.split("/")[-3]
-                i = data_dir.split("/")[-2]
+        data_dirs = glob.glob(data_path + os.sep + "*")
+
+        for data_dir in data_dirs:
+            for sub_dir in glob.glob(data_dir + os.sep + "*"):
+                subject = int(os.path.split(data_dir)[-1].split("_")[-1])
                 dirs.append(
                     {
-                        "index": int("{0}0{1}".format(subject, i)),
-                        "path": os.path.join(data_dir),
+                        "index": subject,
+                        "path": os.path.join(data_dir, sub_dir),
                     }
                 )
-
-        else:
-            data_dirs = glob.glob(data_path + os.sep + "*")
-            print("data_dirs:", data_dirs)
-            for data_dir in data_dirs:
-                for i in range(4):
-                    subject = os.path.split(data_dir)[-1]
-                    if subject.isnumeric():
-                        dirs.append(
-                            {
-                                "index": int("{0}0{1}".format(subject, i)),
-                                "path": os.path.join(data_dir, str(i)),
-                            }
-                        )
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
-
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
         """Returns a subset of data dirs, split with begin and end values,
         and ensures no overlapping subjects between splits"""
-        if self.use_predefined_splits:
-            return data_dirs
         # return the full directory
         if begin == 0 and end == 1:
             return data_dirs
@@ -168,30 +125,44 @@ class COHFACELoader(BaseLoader):
 
         return data_dirs_new
 
-    def preprocess_dataset_subprocess(
-        self, data_dirs, config_preprocess, i, file_list_dict
-    ):
-        """Preprocesses the raw data."""
+    def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
+        """Invoked by preprocess_dataset for multi_process."""
         filename = os.path.split(data_dirs[i]["path"])[-1]
         saved_filename = data_dirs[i]["index"]
-        print("saved filename", saved_filename)
-        print(data_dirs[i])
-        frames = self.read_video(os.path.join(data_dirs[i]["path"], "data.avi"))
-        bvps = self.read_wave(os.path.join(data_dirs[i]["path"], "data.hdf5"))
-        print(frames.shape)
-        print(data_dirs[i]["path"])
-        target_length = frames.shape[0]
-        bvps = BaseLoader.resample_ppg(bvps, target_length)
-        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(frames, bvps, config_preprocess)
-        input_name_list, label_name_list, _ = self.save_multi_process(
-            frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
+        video_path = data_dirs[i]["path"]
+
+        frames = self.read_video(os.path.join(video_path, filename + ".mp4"))
+        bvps = self.generate_pos_uf(frames, fs=self.fs)
+
+        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
+            frames, bvps, config_preprocess
         )
+
+        # if self.pseudo_label_type == "POS_UF":
+        #     print("Using unfiltered POS to generate pseudo_labels")
+        #     bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
+        #
+        #     # preprocessing required for the pseudo labels
+        #     chunk_length = config_preprocess.CHUNK_LENGTH
+        #     clip_num = frames.shape[0] // chunk_length
+        #
+        #     bvps_pseudo_clips = self._preprocess_for_alignment(
+        #         bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+        #     )
+        # else:
+        #     pass
+
         print("frames_clips shape", frames_clips.shape)
         print("bvps_clips shape", bvps_clips.shape)
         print("bvps_pseudo_clips shape", bvps_pseudo_clips.shape)
 
         # raise ValueError("stop")
 
+        input_name_list, label_name_list = (
+            self.save_multi_process(
+                frames_clips, bvps_clips, [], saved_filename
+            )
+        )
         file_list_dict[i] = input_name_list
 
     @staticmethod
@@ -211,10 +182,3 @@ class COHFACELoader(BaseLoader):
             success, frame = VidObj.read()
         print("end of read_video")
         return np.asarray(frames)
-
-    @staticmethod
-    def read_wave(bvp_file):
-        """Reads a bvp signal file."""
-        f = h5py.File(bvp_file, "r")
-        pulse = f["pulse"][:]
-        return pulse
