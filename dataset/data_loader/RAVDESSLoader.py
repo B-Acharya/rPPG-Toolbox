@@ -152,12 +152,6 @@ class RAVDESSLoader(BaseLoader):
         # else:
         #     pass
 
-        print("frames_clips shape", frames_clips.shape)
-        print("bvps_clips shape", bvps_clips.shape)
-        print("bvps_pseudo_clips shape", bvps_pseudo_clips.shape)
-
-        # raise ValueError("stop")
-
         input_name_list, label_name_list = (
             self.save_multi_process(
                 frames_clips, bvps_clips, [], saved_filename

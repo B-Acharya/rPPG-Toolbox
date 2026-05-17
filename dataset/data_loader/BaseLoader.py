@@ -558,8 +558,7 @@ class BaseLoader(Dataset):
         else:
             raise ValueError("Unsupported label type!")
 
-        # TODO: Ask what chunking is used for. For RAVDESS this returned in 0 frame clips
-        if config_preprocess.DO_CHUNK and not self.infer_dataset == "RAVDESS" :  # chunk data into snippets
+        if config_preprocess.DO_CHUNK:  # chunk data into snippets
             frames_clips, bvps_clips = self.chunk(
                 data, bvps, config_preprocess.CHUNK_LENGTH
             )
@@ -750,7 +749,7 @@ class BaseLoader(Dataset):
             bvp_clips: all chunks of bvp frames
         """
 
-        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+        if self.infer_dataset == "DST":
             label_frame_size = len(bvps)
             if label_frame_size > 25000 and label_frame_size < 30000:
                 sampling_rate = 300
@@ -764,7 +763,8 @@ class BaseLoader(Dataset):
         frames_clips = [
             frames[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
         ]
-        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+
+        if self.infer_dataset == "DST":
             bvps_clips = [
                 bvps[i * chunk_length_ecg : (i + 1) * chunk_length_ecg]
                 for i in range(clip_num_ecg)
@@ -844,7 +844,7 @@ class BaseLoader(Dataset):
                     + "{0}_label{1}.npy".format(filename, str(count))
                 )
                 label_path_name_list.append(label_path_name)
-                np.save(label_path_name, bvps_clips)
+                np.save(label_path_name, bvps_clips[i])
                 np.save(input_path_name, frames_clips[i])
                 count += 1
             return input_path_name_list, label_path_name_list
