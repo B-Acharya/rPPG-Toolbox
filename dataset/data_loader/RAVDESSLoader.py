@@ -6,6 +6,7 @@ import cv2
 import h5py
 import numpy as np
 from syncpos.utils.alignsignals import AlignSignals
+from numpy.typing import NDArray
 
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
@@ -100,7 +101,7 @@ class RAVDESSLoader(BaseLoader):
                 {"index": index, "path": data_dir, "subject": subject}
             )
 
-        subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
+        subj_list = list(data_info.keys())  # all subjects by number ID
         subj_list = sorted(subj_list)
         print("Before Shuffle:", subj_list)
         if self.shuffle:
@@ -123,6 +124,11 @@ class RAVDESSLoader(BaseLoader):
             data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
             # chunk num)
 
+        print("dirs length", len(data_dirs_new))
+        print("dirs example", data_dirs_new[0])
+        print("dirs example", data_dirs_new[1])
+        raise ValueError("stop")
+
         return data_dirs_new
 
     def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
@@ -138,26 +144,49 @@ class RAVDESSLoader(BaseLoader):
             frames, bvps, config_preprocess
         )
 
-        # if self.pseudo_label_type == "POS_UF":
-        #     print("Using unfiltered POS to generate pseudo_labels")
-        #     bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
-        #
-        #     # preprocessing required for the pseudo labels
-        #     chunk_length = config_preprocess.CHUNK_LENGTH
-        #     clip_num = frames.shape[0] // chunk_length
-        #
-        #     bvps_pseudo_clips = self._preprocess_for_alignment(
-        #         bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
-        #     )
-        # else:
-        #     pass
+        if self.pseudo_label_type == "POS_UF":
+            print("Using unfiltered POS to generate pseudo_labels")
+            bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
 
-        input_name_list, label_name_list = (
+            # preprocessing required for the pseudo labels
+            chunk_length = config_preprocess.CHUNK_LENGTH
+            clip_num = frames.shape[0] // chunk_length
+
+            bvps_pseudo_clips = self._preprocess_for_alignment(
+                bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+            )
+        else:
+            pass
+
+        input_name_list, label_name_list, _ = (
             self.save_multi_process(
-                frames_clips, bvps_clips, [], saved_filename
+                frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
             )
         )
         file_list_dict[i] = input_name_list
+
+    @staticmethod
+    def _preprocess_for_alignment(
+        bvps, config_preprocess, clip_num: int, chunk_length: int
+    ) -> NDArray:
+        if config_preprocess.LABEL_TYPE == "Raw":
+            pass
+        elif config_preprocess.LABEL_TYPE == "DiffNormalized":
+            bvps = BaseLoader.diff_normalize_label(bvps)
+        elif config_preprocess.LABEL_TYPE == "Standardized":
+            bvps = BaseLoader.standardized_label(bvps)
+        else:
+            raise ValueError("Unsupported label type!")
+
+        if config_preprocess.DO_CHUNK:  # chunk data into snippets
+            bvps_clips = [
+                bvps[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+            ]
+            bvps_clips = np.array(bvps_clips)
+        else:
+            bvps_clips = np.array([bvps])
+
+        return bvps_clips
 
     @staticmethod
     def read_video(video_file):

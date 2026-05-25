@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import scipy.io
-from scipy.signal import butter
+from scipy.signal import butter, periodogram
 from scipy.sparse import spdiags
 from copy import deepcopy
 
@@ -179,6 +179,38 @@ def _calculate_SNR(pred_ppg_signal, hr_label, fs=30, low_pass=0.75, high_pass=2.
         SNR = 0
     return SNR
 
+def _SNR_without_gt(pos_signal, fs=30, low_pass=0.75, high_pass=2.5, peak_bandwidth=0.1):
+    pos_signal = np.asarray(pos_signal)
+
+    f, pxx = scipy.signal.periodogram(pos_signal, fs=fs, detrend=False)
+    pxx = np.squeeze(pxx)
+
+    band_mask = (f >= low_pass) & (f <= high_pass)
+
+    f_band = f[band_mask]
+    pxx_band = pxx[band_mask]
+
+    if len(pxx_band) == 0:
+        return 0.0
+
+    peak_idx = np.argmax(pxx_band)
+    peak_freq = f_band[peak_idx]
+
+    signal_mask = np.abs(f - peak_freq) <= peak_bandwidth
+
+    signal_mask &= band_mask
+
+    noise_mask = band_mask & (~signal_mask)
+
+    signal_power = np.sum(pxx[signal_mask])
+    noise_power = np.sum(pxx[noise_mask])
+
+    if noise_power <= 1e-8:
+        return 0.0
+
+    snr_db = 10 * np.log10(signal_power / noise_power)
+
+    return snr_db
 
 def calculate_metric_per_video(
     predictions,
@@ -222,7 +254,8 @@ def calculate_metric_per_video(
     else:
         raise ValueError("Please use FFT or Peak to calculate your HR.")
     SNR = _calculate_SNR(predictions, hr_label, fs=fs)
-    return hr_label, hr_pred, SNR
+    SNR_without_gt = _SNR_without_gt(labels, fs)
+    return hr_label, hr_pred, SNR, SNR_without_gt
 
 
 def calculate_HR(

@@ -544,7 +544,7 @@ class BaseLoader(Dataset):
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
-            if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+            if self.infer_dataset == "DST":
                 pass
             else:
                 bvps = BaseLoader.diff_normalize_label(bvps)
@@ -829,7 +829,7 @@ class BaseLoader(Dataset):
         label_path_name_list = []
         label_pseudo_path_name_list = []
         print(f"saving filename:{filename}")
-        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+        if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
                 input_path_name = (
