@@ -2,192 +2,212 @@
 
 Details for the COHFACE Dataset see https://www.idiap.ch/en/dataset/cohface
 If you use this dataset, please cite the following publication:
-Guillaume Heusch, André Anjos, Sébastien Marcel, “A reproducible study on remote heart rate measurement”, arXiv, 2016.
+Guillaume Heusch, André Anjos, Sébastien Marcel, "A reproducible study on remote heart rate measurement", arXiv, 2016.
 http://publications.idiap.ch/index.php/publications/show/3688
+
+Data paths (mirrors COHFACEProcessor class constants):
+  Face crops : OUTPUT_ROOT / {participant} / {session}
+               → HDF5 file named by session int (no extension), key "faces"
+               → e.g. /data/rppg_14_bit_video_nt_lab/cropped_face/1/0
+  PPG signal : BVP_DATA_ROOT / {participant} / {session} / data.hdf5
+               → key "pulse"
+               → e.g. /data/rppg_14_cohface_video_nt_lab/raw/1/0/data.hdf5
+
+data_path in the YAML must point to the face-crop root (OUTPUT_ROOT).
 """
 
-import glob
 import os
+import pathlib
 import random
+from pathlib import Path
+from numpy.typing import NDArray
 
-import cv2
 import h5py
 import numpy as np
-
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
+from syncpos.utils.alignsignals import AlignSignals
 
 
 class COHFACELoader(BaseLoader):
     """The data loader for the COHFACE dataset."""
 
-    def __init__(self, name, data_path, config_data, model):
-        """Initializes an COHFACE dataloader.
-        Args:
-            data_path(str): path of a folder which stores raw video and bvp data.
-            e.g. data_path should be "RawData" for below dataset structure:
-            -----------------
-                 RawData/
-                 |   |-- 1/
-                 |      |-- 0/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |      |...
-                 |      |-- 3/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |...
-                 |   |-- n/
-                 |      |-- 0/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-                 |      |...
-                 |      |-- 3/
-                 |          |-- data.avi
-                 |          |-- data.hdf5
-            -----------------
-            name(str): name of the dataloader.
-            config_data(CfgNode): data settings(ref:config.py).
-        """
-        if name == "train":
-            self.split_path = config_data.SPLIT_PATH
-        elif name == "valid":
-            self.split_path = config_data.SPLIT_PATH
-        elif name == "test":
-            self.split_path = config_data.SPLIT_PATH
-        elif name == "unsupervised":
-            self.split_path = config_data.SPLIT_PATH
+    # Mirrors COHFACEProcessor class constants so both sides stay consistent.
+    BVP_DATA_ROOT: Path = Path("/data/rppg_14_cohface_video_nt_lab/raw")
 
-        if self.split_path == None:
-            self.use_predefined_splits = False
+    def __init__(
+        self,
+        name,
+        data_path,
+        config_data,
+        model,
+        device,
+        align=None,
+        sensor_type=None,
+        pseudo_label_type=None,
+        transform=None,
+    ):
+        if align is not None:
+            self.align_signals = AlignSignals(align, config_data.FS)
         else:
-            self.use_predefined_splits = True
+            self.align_signals = None
 
-        super().__init__(name, data_path, config_data, model)
-
-    def _read_split_path(self):
-        data_paths = []
-        with open(self.split_path, "r") as f:
-            for line in f.readlines():
-                data_paths.append(self.raw_data_path + line.strip())
-        return data_paths
+        self.pseudo_label_type = pseudo_label_type
+        super().__init__(name, data_path, config_data, model, device, transform)
 
     def get_raw_data(self, data_path):
-        """Returns data directories under the path(For COHFACE dataset)."""
-        dirs = list()
-        if self.use_predefined_splits:
-            data_dirs = self._read_split_path()
-            for data_dir in data_dirs:
-                subject = data_dir.split("/")[-3]
-                i = data_dir.split("/")[-2]
+        """Returns data directories under the path (for COHFACE dataset).
+
+        COHFACE structure: {data_path}/{subject_int}/{session_int}/
+        Subjects and sessions are integers; sessions are always 0-3.
+        Both levels are sorted numerically to avoid "10" < "2" lexicographic ordering.
+        """
+        dirs = []
+        data_path = pathlib.Path(data_path)
+        for subject_dir in sorted(
+            (p for p in data_path.iterdir() if p.is_dir()),
+            key=lambda p: int(p.name),
+        ):
+            subject = int(subject_dir.name)
+            for session_dir in sorted(
+                (p for p in subject_dir.iterdir() if p.is_dir()),
+                key=lambda p: int(p.name),
+            ):
                 dirs.append(
                     {
-                        "index": int("{0}0{1}".format(subject, i)),
-                        "path": os.path.join(data_dir),
+                        "index": f"{subject}_{session_dir.name}",
+                        "subject": subject,
+                        "path": str(session_dir),
                     }
                 )
-
-        else:
-            data_dirs = glob.glob(data_path + os.sep + "*")
-            for data_dir in data_dirs:
-                for i in range(4):
-                    subject = os.path.split(data_dir)[-1]
-                    dirs.append(
-                        {
-                            "index": int("{0}0{1}".format(subject, i)),
-                            "path": os.path.join(data_dir, str(i)),
-                        }
-                    )
-        if not data_dirs:
+        if not dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values,
-        and ensures no overlapping subjects between splits"""
-        if self.use_predefined_splits:
-            return data_dirs
-        # return the full directory
+        """Returns a subset of data dirs, split with begin/end, no subject overlap."""
         if begin == 0 and end == 1:
             return data_dirs
 
-        # get info about the dataset: subject list and num vids per subject
-        data_info = dict()
+        data_info = {}
         for data in data_dirs:
             subject = data["subject"]
-            data_dir = data["path"]
-            index = data["index"]
-            # creates a dictionary of data_dirs indexed by subject number
-            if subject not in data_info:  # if subject not in the data info dictionary
-                data_info[subject] = []  # make an emplty list for that subject
-            # append a tuple of the filename, subject num, trial num, and chunk num
-            data_info[subject].append(
-                {"index": index, "path": data_dir, "subject": subject}
-            )
+            if subject not in data_info:
+                data_info[subject] = []
+            data_info[subject].append(data)
 
-        subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
-        subj_list = sorted(subj_list)
+        subj_list = sorted(data_info.keys())
         print("Before Shuffle:", subj_list)
         if self.shuffle:
             random.Random(4).shuffle(subj_list)
             print("After Shuffle:", subj_list)
         else:
             print("No Shuffle")
-        num_subjs = len(subj_list)  # number of unique subjects
 
-        # get split of data set (depending on start / end)
-        subj_range = list(range(0, num_subjs))
-        if begin != 0 or end != 1:
-            subj_range = list(range(int(begin * num_subjs), int(end * num_subjs)))
+        num_subjs = len(subj_list)
+        subj_range = list(range(int(begin * num_subjs), int(end * num_subjs)))
 
-        # compile file list
         data_dirs_new = []
         for i in subj_range:
-            subj_num = subj_list[i]
-            subj_files = data_info[subj_num]
-            data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
-            # chunk num)
-
+            data_dirs_new += data_info[subj_list[i]]
         return data_dirs_new
+
+    def split_raw_data_loo(self, data_dirs, participant_ids):
+        """Returns entries whose subject is in participant_ids (leave-one-out support)."""
+        return [d for d in data_dirs if d["subject"] in participant_ids]
 
     def preprocess_dataset_subprocess(
         self, data_dirs, config_preprocess, i, file_list_dict
     ):
-        """Preprocesses the raw data."""
-        filename = os.path.split(data_dirs[i]["path"])[-1]
+        """Invoked by preprocess_dataset for multi-process preprocessing."""
         saved_filename = data_dirs[i]["index"]
-        frames = self.read_video(data_dirs[i]["path"] + ".avi")
-        bvps = self.read_wave(data_dirs[i]["path"] + ".hdf5")
-        print(frames.shape)
-        print(data_dirs[i]["path"])
+        session_path = data_dirs[i]["path"]
+
+        face_file = os.path.join(session_path, "data_faces.hdf5")
+        bvp_file = os.path.join(session_path, "data.hdf5")
+
+        frames = self.read_video(face_file)
+        bvps = self.read_wave(bvp_file)
+
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        input_name_list, label_name_list = self.save_multi_process(
-            frames_clips, bvps_clips, saved_filename
-        )
+
+        if self.align_signals is not None:
+            bvp_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
+            aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
+                bvps, bvp_pseudo
+            )
+            print(f"start-> {video_start_idx}, end-> {video_end_idx}")
+            frames = frames[video_start_idx:video_end_idx]
+
+            frames_clips, bvps_aligned_clips, bvps_pseudo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+            chunk_length = config_preprocess.CHUNK_LENGTH
+            clip_num = frames.shape[0] // chunk_length
+            bvps_clips = self._preprocess_for_alignment(
+                bvps, config_preprocess, clip_num, chunk_length
+            )
+            input_name_list, label_name_list, label_pseudo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_aligned_clips, saved_filename
+                )
+            )
+        else:
+            frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+
+            if self.pseudo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate pseudo_labels")
+                bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
+                chunk_length = config_preprocess.CHUNK_LENGTH
+                clip_num = frames.shape[0] // chunk_length
+                bvps_pseudo_clips = self._preprocess_for_alignment(
+                    bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+                )
+
+            input_name_list, label_name_list, label_pseudo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
+                )
+            )
+
         file_list_dict[i] = input_name_list
 
     @staticmethod
+    def _preprocess_for_alignment(
+        bvps, config_preprocess, clip_num: int, chunk_length: int
+    ) -> NDArray:
+        if config_preprocess.LABEL_TYPE == "Raw":
+            pass
+        elif config_preprocess.LABEL_TYPE == "DiffNormalized":
+            bvps = BaseLoader.diff_normalize_label(bvps)
+        elif config_preprocess.LABEL_TYPE == "Standardized":
+            bvps = BaseLoader.standardized_label(bvps)
+        else:
+            raise ValueError("Unsupported label type!")
+
+        if config_preprocess.DO_CHUNK:
+            bvps_clips = [
+                bvps[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+            ]
+            bvps_clips = np.array(bvps_clips)
+        else:
+            bvps_clips = np.array([bvps])
+        return bvps_clips
+
+    @staticmethod
     def read_video(video_file):
-        """Reads a video file, returns frames(T,H,W,3)"""
-        print("start of read_video")
-        VidObj = cv2.VideoCapture(video_file)
-        VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
-        success, frame = VidObj.read()
-        frames = list()
-        while success:
-            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
-            frame = np.asarray(frame)
-            if np.isnan(frame).any():
-                frame[np.isnan(frame)] = 0  # TODO: maybe change into avg
-            frames.append(frame)
-            success, frame = VidObj.read()
-        print("end of read_video")
-        return np.asarray(frames)
+        """Reads face crops from HDF5, returns (T, H, W, 3)."""
+        with h5py.File(video_file, "r") as f:
+            if "faces" not in f:
+                raise KeyError(
+                    f"'faces' key not found in {video_file}. Available: {list(f.keys())}"
+                )
+            return np.array(f["faces"])
 
     @staticmethod
     def read_wave(bvp_file):
-        """Reads a bvp signal file."""
-        f = h5py.File(bvp_file, "r")
-        pulse = f["pulse"][:]
-        return pulse
+        """Reads ground-truth PPG from HDF5."""
+        with h5py.File(bvp_file, "r") as f:
+            return np.array(f["pulse"])
