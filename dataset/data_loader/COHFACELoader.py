@@ -21,7 +21,6 @@ import pathlib
 import random
 from pathlib import Path
 from numpy.typing import NDArray
-import cv2
 
 import h5py
 import numpy as np
@@ -66,18 +65,13 @@ class COHFACELoader(BaseLoader):
         data_path = pathlib.Path(data_path)
         for subject_dir in sorted(
             (p for p in data_path.iterdir() if p.is_dir()),
+            key=lambda p: int(p.name),
         ):
-            subject = subject_dir.name
-            if not subject.isnumeric():
-                continue
-            subject = int(subject)
-            i = 0
+            subject = int(subject_dir.name)
             for session_dir in sorted(
                 (p for p in subject_dir.iterdir() if p.is_dir()),
                 key=lambda p: int(p.name),
             ):
-                if i >= 4:
-                    continue
                 dirs.append(
                     {
                         "index": f"{subject}_{session_dir.name}",
@@ -85,7 +79,6 @@ class COHFACELoader(BaseLoader):
                         "path": str(session_dir),
                     }
                 )
-                i = i+1
         if not dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
         return dirs
@@ -129,7 +122,7 @@ class COHFACELoader(BaseLoader):
         saved_filename = data_dirs[i]["index"]
         session_path = data_dirs[i]["path"]
 
-        face_file = os.path.join(session_path, "data.avi")
+        face_file = os.path.join(session_path, "data_faces.hdf5")
         bvp_file = os.path.join(session_path, "data.hdf5")
 
         frames = self.read_video(face_file)
@@ -206,20 +199,12 @@ class COHFACELoader(BaseLoader):
     @staticmethod
     def read_video(video_file):
         """Reads face crops from HDF5, returns (T, H, W, 3)."""
-        print("start of read_video")
-        VidObj = cv2.VideoCapture(video_file)
-        VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
-        success, frame = VidObj.read()
-        frames = list()
-        while success:
-            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
-            frame = np.asarray(frame)
-            if np.isnan(frame).any():
-                frame[np.isnan(frame)] = 0  # TODO: maybe change into avg
-            frames.append(frame)
-            success, frame = VidObj.read()
-        print("end of read_video")
-        return np.asarray(frames)
+        with h5py.File(video_file, "r") as f:
+            if "faces" not in f:
+                raise KeyError(
+                    f"'faces' key not found in {video_file}. Available: {list(f.keys())}"
+                )
+            return np.array(f["faces"])
 
     @staticmethod
     def read_wave(bvp_file):
