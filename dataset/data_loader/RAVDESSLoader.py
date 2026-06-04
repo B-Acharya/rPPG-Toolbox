@@ -124,11 +124,6 @@ class RAVDESSLoader(BaseLoader):
             data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
             # chunk num)
 
-        print("dirs length", len(data_dirs_new))
-        print("dirs example", data_dirs_new[0])
-        print("dirs example", data_dirs_new[1])
-        raise ValueError("stop")
-
         return data_dirs_new
 
     def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
