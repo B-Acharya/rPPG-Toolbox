@@ -70,10 +70,11 @@ class RAVDESSLoader(BaseLoader):
         for data_dir in data_dirs:
             for sub_dir in glob.glob(data_dir + os.sep + "*"):
                 subject = int(os.path.split(data_dir)[-1].split("_")[-1])
+                video_path = os.path.join(data_dir, sub_dir)
                 dirs.append(
                     {
                         "index": subject,
-                        "path": os.path.join(data_dir, sub_dir),
+                        "path": video_path,
                     }
                 )
         if not data_dirs:
@@ -131,8 +132,8 @@ class RAVDESSLoader(BaseLoader):
         filename = os.path.split(data_dirs[i]["path"])[-1]
         saved_filename = data_dirs[i]["index"]
         video_path = data_dirs[i]["path"]
-
-        frames = self.read_video(os.path.join(video_path, filename + ".mp4"))
+        print("Processing video: ", video_path)
+        frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
         bvps = self.generate_pos_uf(frames, fs=self.fs)
 
         frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
@@ -141,7 +142,7 @@ class RAVDESSLoader(BaseLoader):
 
         if self.pseudo_label_type == "POS_UF":
             print("Using unfiltered POS to generate pseudo_labels")
-            bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
+            bvps_pseudo_clips = bvps
 
             # preprocessing required for the pseudo labels
             chunk_length = config_preprocess.CHUNK_LENGTH
@@ -185,18 +186,19 @@ class RAVDESSLoader(BaseLoader):
 
     @staticmethod
     def read_video(video_file):
-        """Reads a video file, returns frames(T,H,W,3)"""
-        print("start of read_video")
+        """Reads face crops from HDF5, returns (T, H, W, 3)."""
+        with h5py.File(video_file, "r") as f:
+            if "faces" not in f:
+                raise KeyError(
+                    f"'faces' key not found in {video_file}. Available: {list(f.keys())}"
+                )
+            return np.array(f["faces"])
+
+    @staticmethod
+    def check_video_length(video_file):
+        """Checks if video is at least 100 frames long."""
         VidObj = cv2.VideoCapture(video_file)
-        VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
-        success, frame = VidObj.read()
-        frames = list()
-        while success:
-            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
-            frame = np.asarray(frame)
-            if np.isnan(frame).any():
-                frame[np.isnan(frame)] = 0  # TODO: maybe change into avg
-            frames.append(frame)
-            success, frame = VidObj.read()
-        print("end of read_video")
-        return np.asarray(frames)
+        frame_count = int(VidObj.get(cv2.CAP_PROP_FRAME_COUNT))
+        if frame_count < 100:
+            return False
+        return True
