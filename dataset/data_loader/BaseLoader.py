@@ -882,7 +882,7 @@ class BaseLoader(Dataset):
             )
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=1
+        self, data_dirs, config_preprocess, multi_process_quota=10
     ):
         """Allocate dataset preprocessing across multiple processes with status monitoring.
 

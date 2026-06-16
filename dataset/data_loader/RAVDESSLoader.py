@@ -70,10 +70,12 @@ class RAVDESSLoader(BaseLoader):
         for data_dir in data_dirs:
             for sub_dir in glob.glob(data_dir + os.sep + "*"):
                 subject = int(os.path.split(data_dir)[-1].split("_")[-1])
+                video_dir = sub_dir.split(os.sep)[-1]
                 video_path = os.path.join(data_dir, sub_dir)
                 dirs.append(
                     {
-                        "index": subject,
+                        "index": f"{subject}_{video_dir}",
+                        "subject": subject,
                         "path": video_path,
                     }
                 )
@@ -82,49 +84,31 @@ class RAVDESSLoader(BaseLoader):
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values,
-        and ensures no overlapping subjects between splits"""
-        # return the full directory
+        """Returns a subset of data dirs, split with begin/end, no subject overlap."""
         if begin == 0 and end == 1:
             return data_dirs
 
-        # get info about the dataset: subject list and num vids per subject
-        data_info = dict()
+        data_info = {}
         for data in data_dirs:
             subject = data["subject"]
-            data_dir = data["path"]
-            index = data["index"]
-            # creates a dictionary of data_dirs indexed by subject number
-            if subject not in data_info:  # if subject not in the data info dictionary
-                data_info[subject] = []  # make an emplty list for that subject
-            # append a tuple of the filename, subject num, trial num, and chunk num
-            data_info[subject].append(
-                {"index": index, "path": data_dir, "subject": subject}
-            )
+            if subject not in data_info:
+                data_info[subject] = []
+            data_info[subject].append(data)
 
-        subj_list = list(data_info.keys())  # all subjects by number ID
-        subj_list = sorted(subj_list)
+        subj_list = sorted(data_info.keys())
         print("Before Shuffle:", subj_list)
         if self.shuffle:
             random.Random(4).shuffle(subj_list)
             print("After Shuffle:", subj_list)
         else:
             print("No Shuffle")
-        num_subjs = len(subj_list)  # number of unique subjects
 
-        # get split of data set (depending on start / end)
-        subj_range = list(range(0, num_subjs))
-        if begin != 0 or end != 1:
-            subj_range = list(range(int(begin * num_subjs), int(end * num_subjs)))
+        num_subjs = len(subj_list)
+        subj_range = list(range(int(begin * num_subjs), int(end * num_subjs)))
 
-        # compile file list
         data_dirs_new = []
         for i in subj_range:
-            subj_num = subj_list[i]
-            subj_files = data_info[subj_num]
-            data_dirs_new += subj_files  # add file information to file_list (tuple of fname, subj ID, trial num,
-            # chunk num)
-
+            data_dirs_new += data_info[subj_list[i]]
         return data_dirs_new
 
     def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
