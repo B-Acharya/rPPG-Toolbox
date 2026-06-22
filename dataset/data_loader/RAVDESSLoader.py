@@ -118,26 +118,28 @@ class RAVDESSLoader(BaseLoader):
         video_path = data_dirs[i]["path"]
         print("Processing video: ", video_path)
         frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
-        bvps = self.generate_pos_uf(frames, fs=self.fs)
+
+        if self.pseudo_label_type == "POS_UF":
+            print("Using unfiltered POS to generate pseudo_labels")
+            bvps = self.generate_pos_uf(frames, fs=self.fs)
+        elif self.pseudo_label_type == "CHROM":
+            print("Using CHROM to generate pseudo_labels")
+            bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
+        else:
+            raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
 
         frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
             frames, bvps, config_preprocess
         )
+        bvps_pseudo_clips = bvps
 
-        if self.pseudo_label_type == "POS_UF":
-            print("Using unfiltered POS to generate pseudo_labels")
-            bvps_pseudo_clips = bvps
+        # preprocessing required for the pseudo labels
+        chunk_length = config_preprocess.CHUNK_LENGTH
+        clip_num = frames.shape[0] // chunk_length
 
-            # preprocessing required for the pseudo labels
-            chunk_length = config_preprocess.CHUNK_LENGTH
-            clip_num = frames.shape[0] // chunk_length
-
-            bvps_pseudo_clips = self._preprocess_for_alignment(
-                bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
-            )
-        else:
-            pass
-
+        bvps_pseudo_clips = self._preprocess_for_alignment(
+            bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+        )
         input_name_list, label_name_list, _ = (
             self.save_multi_process(
                 frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
