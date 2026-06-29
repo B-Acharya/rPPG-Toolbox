@@ -9,7 +9,7 @@ import math
 import numpy as np
 from scipy import linalg
 from scipy import signal
-from unsupervised_methods import utils
+from rPPG_Toolbox.unsupervised_methods import utils
 
 
 def PBV(frames):

@@ -31,7 +31,7 @@ class EfficientPhysTrainer(BaseTrainer):
         self.config = config
         self.min_valid_loss = None
         self.best_epoch = 0
-        
+
         if config.TOOLBOX_MODE == "train_and_test":
             self.model = EfficientPhys(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(
                 self.device)
@@ -101,7 +101,7 @@ class EfficientPhysTrainer(BaseTrainer):
             mean_training_losses.append(np.mean(train_loss))
 
             self.save_model(epoch)
-            if not self.config.TEST.USE_LAST_EPOCH: 
+            if not self.config.TEST.USE_LAST_EPOCH:
                 valid_loss = self.valid(data_loader)
                 mean_valid_losses.append(valid_loss)
                 print('validation loss: ', valid_loss)
@@ -113,7 +113,7 @@ class EfficientPhysTrainer(BaseTrainer):
                     self.min_valid_loss = valid_loss
                     self.best_epoch = epoch
                     print("Update best model! Best epoch: {}".format(self.best_epoch))
-        if not self.config.TEST.USE_LAST_EPOCH: 
+        if not self.config.TEST.USE_LAST_EPOCH:
             print("best trained epoch: {}, min_val_loss: {}".format(self.best_epoch, self.min_valid_loss))
         if self.config.TRAIN.PLOT_LOSSES_AND_LR:
             self.plot_losses_and_lrs(mean_training_losses, mean_valid_losses, lrs, self.config)

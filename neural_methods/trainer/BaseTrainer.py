@@ -27,11 +27,11 @@ class BaseTrainer:
         pass
 
     def save_test_outputs(self, predictions, labels, config):
-    
+
         output_dir = config.TEST.OUTPUT_SAVE_DIR
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
-        
+
         # Filename ID to be used in any output files that get saved
         if config.TOOLBOX_MODE == 'train_and_test':
             filename_id = self.model_file_name
@@ -64,7 +64,7 @@ class BaseTrainer:
             filename_id = self.model_file_name
         else:
             raise ValueError('Metrics.py evaluation only supports train_and_test and only_test!')
-        
+
         # Create a single plot for training and validation losses
         plt.figure(figsize=(10, 6))
         epochs = range(0, len(train_loss))  # Integer values for x-axis

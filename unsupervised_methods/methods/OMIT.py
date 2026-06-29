@@ -6,7 +6,7 @@ IEEE Journal of Biomedical and Health Informatics.
 """
 
 import numpy as np
-from unsupervised_methods import utils
+import rPPG_Toolbox.unsupervised_methods.utils as utils
 
 
 def OMIT(frames):

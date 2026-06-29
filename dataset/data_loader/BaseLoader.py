@@ -2,27 +2,82 @@
 
 Provides a pytorch-style data-loader for end-to-end training pipelines.
 Extend the class to support specific datasets.
-Dataset already supported: UBFC-rPPG, PURE, SCAMPS, BP4D+, and UBFC-PHYS.
+Dataset already supported: UBFC, PURE, SCAMPS, and COHFACE.
 
 """
-import csv
+
 import glob
 import os
-import re
+
 from math import ceil
 from scipy import signal
-from scipy import sparse
-from unsupervised_methods.methods import POS_WANG
-from unsupervised_methods import utils
+from rPPG_Toolbox.unsupervised_methods.methods import POS_WANG, CHROME_DEHAAN
+from rPPG_Toolbox.unsupervised_methods import utils
 import math
-from multiprocessing import Pool, Process, Value, Array, Manager
+import multiprocessing as mp
+
+# To be used only for preparing data - for detecting face with YOLO5Face
+try:
+    mp.set_start_method("spawn", force=True)
+    # print("spawned")
+except RuntimeError:
+    pass
 
 import cv2
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
+from torchvision import tv_tensors
+import random
+from scipy.signal import welch
+import torch
+
+# from retinaface import RetinaFace   # Source code: https://github.com/serengil/retinaface
+
+
+def get_hr(y, sr=30, min=30, max=180):
+    p, q = welch(y, sr, nfft=1e5 / sr, nperseg=np.min((len(y) - 1, 256)))
+    return (
+        p[(p > min / 60) & (p < max / 60)][
+            np.argmax(q[(p > min / 60) & (p < max / 60)])
+        ]
+        * 60
+    )
+
+
+class Normaliztion(object):
+    """
+    same as mxnet, normalize into [-1, 1]
+    image = (image - 127.5)/128
+    """
+
+    def __call__(self, video):
+        new_video_x = (video - 127.5) / 128
+        return new_video_x
+
+
+class RandomHorizontalFlip(object):
+    """Horizontally flip the given Image randomly with a probability of 0.5."""
+
+    def __call__(self, video):
+        h, w = video.shape[1], video.shape[2]
+        clip_frames = video.shape[0]
+        new_video_x = np.zeros((clip_frames, h, w, 3))
+
+        p = random.random()
+        if p < 0.5:
+            # print('Flip')
+            for i in range(clip_frames):
+                # video
+                image = video[i, :, :, :]
+                image = cv2.flip(image, 1)
+                new_video_x[i, :, :, :] = image
+            return new_video_x
+
+        else:
+            # print('no Flip')
+            return video
 
 
 class BaseLoader(Dataset):
@@ -35,13 +90,19 @@ class BaseLoader(Dataset):
     @staticmethod
     def add_data_loader_args(parser):
         """Adds arguments to parser for training process"""
-        parser.add_argument(
-            "--cached_path", default=None, type=str)
-        parser.add_argument(
-            "--preprocess", default=None, action='store_true')
+        parser.add_argument("--cached_path", default=None, type=str)
+        parser.add_argument("--preprocess", default=None, action="store_true")
         return parser
 
-    def __init__(self, dataset_name, raw_data_path, config_data):
+    def __init__(
+        self,
+        dataset_name,
+        raw_data_path,
+        config_data,
+        model,
+        device=None,
+        transform=None,
+    ):
         """Inits dataloader with lists of files.
 
         Args:
@@ -51,36 +112,80 @@ class BaseLoader(Dataset):
         """
         self.inputs = list()
         self.labels = list()
+        self.labels_pseudo = list()
         self.dataset_name = dataset_name
+        self.infer_dataset = config_data.DATASET
         self.raw_data_path = raw_data_path
         self.cached_path = config_data.CACHED_PATH
         self.file_list_path = config_data.FILE_LIST_PATH
         self.preprocessed_data_len = 0
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
-        self.config_data = config_data
+        self.loo = config_data.LOO
+        self.shuffle = config_data.SHUFFLE
+        self.fs = config_data.FS
+        # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
+        self.model = model
+        self.transform = transform
 
-        assert (config_data.BEGIN < config_data.END)
-        assert (config_data.BEGIN > 0 or config_data.BEGIN == 0)
-        assert (config_data.END < 1 or config_data.END == 1)
+        if model == "PhysFormer":
+            self.transform = transforms.Compose(
+                [Normaliztion(), RandomHorizontalFlip()]
+            )
+        if self.loo:
+            self.participant_ids = config_data.PARTICIPANT_IDS
+
+        if self.do_preprocess:
+            from rPPG_Toolbox.dataset.data_loader.face_detector.YOLO5Face import (
+                YOLO5Face,
+            )
+
+            if "Y5F" in config_data.PREPROCESS.CROP_FACE.BACKEND:
+                self.Y5FObj = YOLO5Face(
+                    config_data.PREPROCESS.CROP_FACE.BACKEND, device
+                )
+
+        assert config_data.BEGIN < config_data.END
+        assert config_data.BEGIN > 0 or config_data.BEGIN == 0
+        assert config_data.END < 1 or config_data.END == 1
         if config_data.DO_PREPROCESS:
             self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
-            self.preprocess_dataset(self.raw_data_dirs, config_data.PREPROCESS, config_data.BEGIN, config_data.END)
+            print(f"\n[Preprocessing] Preprocessed files will be saved to: {self.cached_path}")
+            print(f"[Preprocessing] File list will be written to:         {self.file_list_path}\n")
+            self.preprocess_dataset(
+                self.raw_data_dirs,
+                config_data.PREPROCESS,
+                config_data.BEGIN,
+                config_data.END,
+            )
         else:
+            print("Checking if cached path exists ...", self.cached_path)
             if not os.path.exists(self.cached_path):
-                print('CACHED_PATH:', self.cached_path)
-                raise ValueError(self.dataset_name,
-                                 'Please set DO_PREPROCESS to True. Preprocessed directory does not exist!')
+                print("CACHED_PATH:", self.cached_path)
+                raise ValueError(
+                    self.dataset_name,
+                    "Please set DO_PREPROCESS to True. Preprocessed directory does not exist!",
+                )
+            print("Cached path exists...")
+            print("Checking if cached path exists ...", self.file_list_path)
             if not os.path.exists(self.file_list_path):
-                print('File list does not exist... generating now...')
+                print("File list does not exist... generating now...")
+                raise FileNotFoundError(
+                    "Preprocessing not carried out, please run the processing to run and generate the folds and do not build files retroactively"
+                )
                 self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
-                self.build_file_list_retroactive(self.raw_data_dirs, config_data.BEGIN, config_data.END)
-                print('File list generated.', end='\n\n')
-
+                print(self.raw_data_dirs)
+                self.build_file_list_retroactive(
+                    self.raw_data_dirs, config_data.BEGIN, config_data.END
+                )
+                print("File list generated.", end="\n\n")
             self.load_preprocessed_data()
-        print('Cached Data Path', self.cached_path, end='\n\n')
-        print('File List Path', self.file_list_path)
-        print(f" {self.dataset_name} Preprocessed Dataset Length: {self.preprocessed_data_len}", end='\n\n')
+        print("Cached Data Path", self.cached_path, end="\n\n")
+        print("File List Path", self.file_list_path)
+        print(
+            f" {self.dataset_name} Preprocessed Dataset Length: {self.preprocessed_data_len}",
+            end="\n\n",
+        )
 
     def __len__(self):
         """Returns the length of the dataset."""
@@ -90,31 +195,142 @@ class BaseLoader(Dataset):
         """Returns a clip of video(3,T,W,H) and it's corresponding signals(T)."""
         data = np.load(self.inputs[index])
         label = np.load(self.labels[index])
-        if self.data_format == 'NDCHW':
-            data = np.transpose(data, (0, 3, 1, 2))
-        elif self.data_format == 'NCDHW':
-            data = np.transpose(data, (3, 0, 1, 2))
-        elif self.data_format == 'NDHWC':
+        label_pseudo = np.load(self.labels_pseudo[index])
+
+        # Converstion for handling augmenatations
+        data = torch.from_numpy(data).float()
+        data = tv_tensors.Video(data)
+
+        label = torch.from_numpy(label).float()
+        label_pseudo = torch.from_numpy(label_pseudo).float()
+
+        # Transform expect the input to be T, C, H, W
+        data = data.permute(0, 3, 1, 2)
+
+        if self.transform:
+            data = self.transform(data)
+
+        # Permute back to input shape for handling different config specific transforms
+        data = data.permute(0, 2, 3, 1)
+
+        if self.data_format == "NDCHW":
+            # data = np.transpose(data, (0, 3, 1, 2))
+            data = data.permute(0, 3, 1, 2)
+        elif self.data_format == "NCDHW":
+            # data = np.transpose(data, (3, 0, 1, 2))
+            data = data.permute(3, 0, 1, 2)
+        elif self.data_format == "NDHWC":
             pass
         else:
-            raise ValueError('Unsupported Data Format!')
-        data = np.float32(data)
-        label = np.float32(label)
+            raise ValueError("Unsupported Data Format!")
+        # data = np.float32(data)
+        # label = np.float32(label)
+        # label_pseudo = np.float32(label_pseudo)
+
         # item_path is the location of a specific clip in a preprocessing output folder
         # For example, an item path could be /home/data/PURE_SizeW72_...unsupervised/501_input0.npy
         item_path = self.inputs[index]
         # item_path_filename is simply the filename of the specific clip
         # For example, the preceding item_path's filename would be 501_input0.npy
         item_path_filename = item_path.split(os.sep)[-1]
-        # split_idx represents the point in the previous filename where we want to split the string
+        # train split_idx represents the point in the previous filename where we want to split the string
         # in order to retrieve a more precise filename (e.g., 501) preceding the chunk (e.g., input0)
-        split_idx = item_path_filename.rindex('_')
+        split_idx = item_path_filename.rindex("_")
         # Following the previous comments, the filename for example would be 501
         filename = item_path_filename[:split_idx]
         # chunk_id is the extracted, numeric chunk identifier. Following the previous comments,
         # the chunk_id for example would be 0
-        chunk_id = item_path_filename[split_idx + 6:].split('.')[0]
-        return data, label, filename, chunk_id
+        chunk_id = item_path_filename[split_idx + 6 :].split(".")[0]
+        if self.model == "PhysFormer":
+            clip_average_HR = get_hr(label, sr=self.fs)
+            if self.dataset_name == "train":
+                p = random.random()
+                if p < 0.5:  # sampling aug     p < 0.5
+                    # augment the video
+                    data, label, clip_average_HR = self.get_single_video_x_aug(
+                        data, label, clip_average_HR
+                    )
+                if self.transform:
+                    data = self.transform(data)
+
+            return (
+                np.transpose(data, (3, 0, 1, 2)),
+                label,
+                filename,
+                chunk_id,
+                clip_average_HR,
+            )
+
+        return data, label, filename, chunk_id, label_pseudo
+
+    def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
+        clip_frames = data.shape[0]  # 160
+        data_x = np.zeros((clip_frames, 128, 128, 3))
+        label_new = np.zeros(clip_frames)
+
+        size_crop = np.random.randint(16)
+
+        if clip_average_HR > 88:  # halve
+            clip_average_HR = clip_average_HR / 2
+            for tt in range(clip_frames - 1):
+                if tt % 2 == 0:
+                    image_id = tt // 2
+                    tmp_image = data[image_id]
+                    label_new[tt] = ecg_label[tt // 2]
+
+                else:
+                    image_id1 = tt // 2
+                    image_id2 = image_id1 + 1
+                    tmp_image1 = data[image_id1]
+                    tmp_image2 = data[image_id2]
+
+                    tmp_image = (
+                        tmp_image1 // 2 + tmp_image2 // 2
+                    )  # mean linear interpolation
+                    label_new[tt] = ecg_label[tt // 2] / 2 + ecg_label[tt // 2 + 1] / 2
+
+                tmp_image = cv2.resize(
+                    tmp_image,
+                    (128 + size_crop, 128 + size_crop),
+                    interpolation=cv2.INTER_CUBIC,
+                )[
+                    (size_crop // 2) : (128 + size_crop // 2),
+                    (size_crop // 2) : (128 + size_crop // 2),
+                    :,
+                ]
+
+                image_x_aug = tmp_image
+                data_x[tt, :, :, :] = image_x_aug
+
+        else:  # double
+            clip_average_HR = clip_average_HR * 2
+            for tt in range(clip_frames // 2):
+                image_id = tt * 2
+                tmp_image = data[image_id]
+
+                tmp_image = cv2.resize(
+                    tmp_image,
+                    (128 + size_crop, 128 + size_crop),
+                    interpolation=cv2.INTER_CUBIC,
+                )[
+                    (size_crop // 2) : (128 + size_crop // 2),
+                    (size_crop // 2) : (128 + size_crop // 2),
+                    :,
+                ]
+
+                image_x_aug = tmp_image
+                data_x[tt, :, :, :] = image_x_aug
+
+                # approximation
+                label_new[tt] = ecg_label[tt * 2]
+
+            # The upsampled fradatames are repeated to get 160
+            data_x[(clip_frames // 2) :, :, :, :] = data_x[
+                : (clip_frames // 2), :, :, :
+            ]
+            label_new[clip_frames // 2 :] = ecg_label[: clip_frames // 2]
+
+        return data_x, label_new, clip_average_HR
 
     def get_raw_data(self, raw_data_path):
         """Returns raw data directories under the path.
@@ -138,16 +354,28 @@ class BaseLoader(Dataset):
     def read_npy_video(self, video_file):
         """Reads a video file in the numpy format (.npy), returns frames(T,H,W,3)"""
         frames = np.load(video_file[0])
-        if np.issubdtype(frames.dtype, np.integer) and np.min(frames) >= 0 and np.max(frames) <= 255:
+        if (
+            np.issubdtype(frames.dtype, np.integer)
+            and np.min(frames) >= 0
+            and np.max(frames) <= 255
+        ):
             processed_frames = [frame.astype(np.uint8)[..., :3] for frame in frames]
-        elif np.issubdtype(frames.dtype, np.floating) and np.min(frames) >= 0.0 and np.max(frames) <= 1.0:
-            processed_frames = [(np.round(frame * 255)).astype(np.uint8)[..., :3] for frame in frames]
+        elif (
+            np.issubdtype(frames.dtype, np.floating)
+            and np.min(frames) >= 0.0
+            and np.max(frames) <= 1.0
+        ):
+            processed_frames = [
+                (np.round(frame * 255)).astype(np.uint8)[..., :3] for frame in frames
+            ]
         else:
-            raise Exception(f'Loaded frames are of an incorrect type or range of values! '\
-            + f'Received frames of type {frames.dtype} and range {np.min(frames)} to {np.max(frames)}.')
+            raise Exception(
+                "Loaded frames are of an incorrect type or range of values! "
+                + f"Received frames of type {frames.dtype} and range {np.min(frames)} to {np.max(frames)}."
+            )
         return np.asarray(processed_frames)
 
-    def generate_pos_psuedo_labels(self, frames, fs=30):
+    def generate_pos_pseudo_labels(self, frames, fs=30):
         """Generated POS-based PPG Psuedo Labels For Training
 
         Args:
@@ -184,15 +412,100 @@ class BaseLoader(Dataset):
         # min freq of 0.7Hz was experimentally found to work better than 0.75Hz
         min_freq = 0.70
         max_freq = 3
-        b, a = signal.butter(2, [(min_freq) / fs * 2, (max_freq) / fs * 2], btype='bandpass')
+        b, a = signal.butter(
+            2, [(min_freq) / fs * 2, (max_freq) / fs * 2], btype="bandpass"
+        )
         pos_bvp = signal.filtfilt(b, a, bvp.astype(np.double))
 
         # apply hilbert normalization to normalize PPG amplitude
         analytic_signal = signal.hilbert(pos_bvp)
-        amplitude_envelope = np.abs(analytic_signal) # derive envelope signal
-        env_norm_bvp = pos_bvp/amplitude_envelope # normalize by env
+        amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
+        env_norm_bvp = pos_bvp / amplitude_envelope  # normalize by env
 
-        return np.array(env_norm_bvp) # return POS psuedo labels
+        return np.array(env_norm_bvp)  # return POS pseudo labels
+
+    def generate_chrom_pseudo_labels(self, frames, fs=30):
+        LPF = 0.7
+        HPF = 2.5
+        WinSec = 1.6
+
+        RGB = CHROME_DEHAAN.process_video(frames)
+        FN = RGB.shape[0]
+        NyquistF = 1 / 2 * fs
+        B, A = signal.butter(3, [LPF / NyquistF, HPF / NyquistF], "bandpass")
+
+        WinL = math.ceil(WinSec * fs)
+        if WinL % 2:
+            WinL = WinL + 1
+        NWin = math.floor((FN - WinL // 2) / (WinL // 2))
+        WinS = 0
+        WinM = int(WinS + WinL // 2)
+        WinE = WinS + WinL
+        totallen = (WinL // 2) * (NWin + 1)
+        S = np.zeros(totallen)
+
+        for i in range(NWin):
+            RGBBase = np.mean(RGB[WinS:WinE, :], axis=0)
+            RGBNorm = np.zeros((WinE - WinS, 3))
+            for temp in range(WinS, WinE):
+                RGBNorm[temp - WinS] = np.true_divide(RGB[temp], RGBBase)
+            Xs = np.squeeze(3 * RGBNorm[:, 0] - 2 * RGBNorm[:, 1])
+            Ys = np.squeeze(1.5 * RGBNorm[:, 0] + RGBNorm[:, 1] - 1.5 * RGBNorm[:, 2])
+            Xf = signal.filtfilt(B, A, Xs, axis=0)
+            Yf = signal.filtfilt(B, A, Ys)
+
+            Alpha = np.std(Xf) / np.std(Yf)
+            SWin = Xf - Alpha * Yf
+            SWin = np.multiply(SWin, signal.windows.hann(WinL))
+
+            temp = SWin[: int(WinL // 2)]
+            S[WinS:WinM] = S[WinS:WinM] + SWin[: int(WinL // 2)]
+            S[WinM:WinE] = SWin[int(WinL // 2):]
+            WinS = WinM
+            WinM = WinS + WinL // 2
+            WinE = WinS + WinL
+        BVP = S
+        return BVP
+
+    def generate_pos_uf(self, frames, fs=30):
+        """Generated POS-based PPG Psuedo Labels For Training
+
+        Args:
+            frames(List[array]): a video frames.
+            fs(int or float): Sampling rate of video
+        Returns:
+            env_norm_bvp: Hilbert envlope normalized POS PPG signal, filtered are HR frequency
+        """
+
+        # generate POS PPG signal
+        WinSec = 1.6
+        RGB = POS_WANG._process_video(frames)
+        N = RGB.shape[0]
+        H = np.zeros((1, N))
+        l = math.ceil(WinSec * fs)
+
+        for n in range(N):
+            m = n - l
+            if m >= 0:
+                Cn = np.true_divide(RGB[m:n, :], np.mean(RGB[m:n, :], axis=0))
+                Cn = np.mat(Cn).H
+                S = np.matmul(np.array([[0, 1, -1], [-2, 1, 1]]), Cn)
+                h = S[0, :] + (np.std(S[0, :]) / np.std(S[1, :])) * S[1, :]
+                mean_h = np.mean(h)
+                for temp in range(h.shape[1]):
+                    h[0, temp] = h[0, temp] - mean_h
+                H[0, m:n] = H[0, m:n] + (h[0])
+
+        bvp = H
+        bvp = utils.detrend(np.mat(bvp).H, 100)
+        bvp = np.asarray(np.transpose(bvp))[0]
+
+        # apply hilbert normalization to normalize PPG amplitude
+        analytic_signal = signal.hilbert(bvp)
+        amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
+        env_norm_bvp = bvp / amplitude_envelope  # normalize by env
+
+        return np.array(env_norm_bvp)  # return POS pseudo labels
 
     def preprocess_dataset(self, data_dirs, config_preprocess, begin, end):
         """Parses and preprocesses all the raw data based on split.
@@ -203,12 +516,20 @@ class BaseLoader(Dataset):
             begin(float): index of begining during train/val split.
             end(float): index of ending during train/val split.
         """
-        data_dirs_split = self.split_raw_data(data_dirs, begin, end)  # partition dataset
+        if not self.loo:
+            data_dirs_split = self.split_raw_data(
+                data_dirs, begin, end
+            )  # partition dataset
+        else:
+            data_dirs_split = self.split_raw_data_loo(data_dirs, self.participant_ids)
         # send data directories to be processed
         file_list_dict = self.multi_process_manager(data_dirs_split, config_preprocess)
+        print(file_list_dict)
         self.build_file_list(file_list_dict)  # build file list
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
-        print("Total Number of raw files preprocessed:", len(data_dirs_split), end='\n\n')
+        print(
+            "Total Number of raw files preprocessed:", len(data_dirs_split), end="\n\n"
+        )
 
     def preprocess(self, frames, bvps, config_preprocess):
         """Preprocesses a pair of data.
@@ -232,7 +553,8 @@ class BaseLoader(Dataset):
             config_preprocess.CROP_FACE.DETECTION.DYNAMIC_DETECTION_FREQUENCY,
             config_preprocess.CROP_FACE.DETECTION.USE_MEDIAN_FACE_BOX,
             config_preprocess.RESIZE.W,
-            config_preprocess.RESIZE.H)
+            config_preprocess.RESIZE.H,
+        )
         # Check data transformation type
         data = list()  # Video data
         for data_type in config_preprocess.DATA_TYPE:
@@ -240,9 +562,20 @@ class BaseLoader(Dataset):
             if data_type == "Raw":
                 data.append(f_c)
             elif data_type == "DiffNormalized":
+                # DST dataset has ecg samples which need not be diffnormalized but the predictions from tscan need to be
                 data.append(BaseLoader.diff_normalize_data(f_c))
             elif data_type == "Standardized":
+                # DST dataset has ecg samples which need not be standardized but the predictions from tscan need to be
                 data.append(BaseLoader.standardized_data(f_c))
+            elif data_type == "SkinSegmentation":
+                # import for skin segmation algorimths package by bob
+                data.append(BaseLoader.skin_segment_data(f_c))
+                # f, ax = plt.subplots(1, 1)
+                # ax.set_title('skin Image')
+                # ax.set_xticks([])
+                # ax.set_yticks([])
+                # ax.imshow(numpy.rollaxis(numpy.rollaxis(data[1][0], 2), 2))
+                # plt.show()
             else:
                 raise ValueError("Unsupported data type!")
         data = np.concatenate(data, axis=-1)  # concatenate all channels
@@ -254,24 +587,33 @@ class BaseLoader(Dataset):
         if config_preprocess.LABEL_TYPE == "Raw":
             pass
         elif config_preprocess.LABEL_TYPE == "DiffNormalized":
-            if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+            if self.infer_dataset == "DST":
                 pass
             else:
                 bvps = BaseLoader.diff_normalize_label(bvps)
                 bvps_pseudo = BaseLoader.diff_normalize_label(bvps_pseudo)
         elif config_preprocess.LABEL_TYPE == "Standardized":
-            bvps = BaseLoader.standardized_label(bvps)
+            if self.infer_dataset == "DST":
+                pass
+            else:
+                bvps = BaseLoader.standardized_label(bvps)
+                bvps_pseudo = BaseLoader.standardized_label(bvps_pseudo)
         else:
             raise ValueError("Unsupported label type!")
 
         if config_preprocess.DO_CHUNK:  # chunk data into snippets
             frames_clips, bvps_clips = self.chunk(
-                data, bvps, config_preprocess.CHUNK_LENGTH)
+                data, bvps, config_preprocess.CHUNK_LENGTH
+            )
+            _, bvps_pseudo_clips = self.chunk(
+                data, bvps_pseudo, config_preprocess.CHUNK_LENGTH
+            )
         else:
             frames_clips = np.array([data])
             bvps_clips = np.array([bvps])
+            bvps_pseudo_clips = np.array([bvps_pseudo])
 
-        return frames_clips, bvps_clips
+        return frames_clips, bvps_clips, bvps_pseudo_clips
 
     def face_detection(self, frame, backend, use_larger_box=False, larger_box_coef=1.0):
         """Face detection on a single frame.
@@ -288,12 +630,13 @@ class BaseLoader(Dataset):
             # Use OpenCV's Haar Cascade algorithm implementation for face detection
             # This should only utilize the CPU
             detector = cv2.CascadeClassifier(
-            './dataset/haarcascade_frontalface_default.xml')
+                "/homes/bacharya/syncpos/rPPG_Toolbox/dataset/haarcascade_frontalface_default.xml"
+            )
 
             # Computed face_zone(s) are in the form [x_coord, y_coord, width, height]
             # (x,y) corresponds to the top-left corner of the zone to define using
             # the computed width and height.
-            face_zone = detector.detectMultiScale(frame)
+            face_zone = detector.detectMultiScale(frame[:, :, :3].astype(np.uint8))
 
             if len(face_zone) < 1:
                 print("ERROR: No Face Detected")
@@ -303,23 +646,19 @@ class BaseLoader(Dataset):
                 # The face zones are boxes, so the width and height are the same
                 max_width_index = np.argmax(face_zone[:, 2])  # Index of maximum width
                 face_box_coor = face_zone[max_width_index]
-                print("Warning: More than one faces are detected. Only cropping the biggest one.")
+                print(
+                    "Warning: More than one faces are detected. Only cropping the biggest one."
+                )
             else:
                 face_box_coor = face_zone[0]
-        elif backend == "RF":
-            # Use a TensorFlow-based RetinaFace implementation for face detection
+        elif "Y5F" in backend:
+            # Use a YOLO5Face trained on WiderFace dataset
             # This utilizes both the CPU and GPU
-            res = RetinaFace.detect_faces(frame)
 
-            if len(res) > 0:
-                # Pick the highest score
-                highest_score_face = max(res.values(), key=lambda x: x['score'])
-                face_zone = highest_score_face['facial_area']
+            res = self.Y5FObj.detect_face(frame[:, :, :3].astype(np.uint8))
 
-                # This implementation of RetinaFace returns a face_zone in the
-                # form [x_min, y_min, x_max, y_max] that corresponds to the
-                # corners of a face zone
-                x_min, y_min, x_max, y_max = face_zone
+            if res != None:
+                x_min, y_min, x_max, y_max = res
 
                 # Convert to this toolbox's expected format
                 # Expected format: [x_coord, y_coord, width, height]
@@ -339,6 +678,7 @@ class BaseLoader(Dataset):
                 new_x = center_x - (square_size // 2)
                 new_y = center_y - (square_size // 2)
                 face_box_coor = [new_x, new_y, square_size, square_size]
+
             else:
                 print("ERROR: No Face Detected")
                 face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
@@ -346,14 +686,29 @@ class BaseLoader(Dataset):
             raise ValueError("Unsupported face detection backend!")
 
         if use_larger_box:
-            face_box_coor[0] = max(0, face_box_coor[0] - (larger_box_coef - 1.0) / 2 * face_box_coor[2])
-            face_box_coor[1] = max(0, face_box_coor[1] - (larger_box_coef - 1.0) / 2 * face_box_coor[3])
+            face_box_coor[0] = max(
+                0, face_box_coor[0] - (larger_box_coef - 1.0) / 2 * face_box_coor[2]
+            )
+            face_box_coor[1] = max(
+                0, face_box_coor[1] - (larger_box_coef - 1.0) / 2 * face_box_coor[3]
+            )
             face_box_coor[2] = larger_box_coef * face_box_coor[2]
             face_box_coor[3] = larger_box_coef * face_box_coor[3]
         return face_box_coor
 
-    def crop_face_resize(self, frames, use_face_detection, backend, use_larger_box, larger_box_coef, use_dynamic_detection,
-                         detection_freq, use_median_box, width, height):
+    def crop_face_resize(
+        self,
+        frames,
+        use_face_detection,
+        backend,
+        use_larger_box,
+        larger_box_coef,
+        use_dynamic_detection,
+        detection_freq,
+        use_median_box,
+        width,
+        height,
+    ):
         """Crop face and resize frames.
 
         Args:
@@ -378,19 +733,29 @@ class BaseLoader(Dataset):
             num_dynamic_det = 1
         face_region_all = []
         # Perform face detection by num_dynamic_det" times.
-        for idx in range(num_dynamic_det):
+        # print(frames[0].shape)
+        for idx in tqdm(range(num_dynamic_det)):
             if use_face_detection:
-                face_region_all.append(self.face_detection(frames[detection_freq * idx], backend, use_larger_box, larger_box_coef))
+                print("using face detection")
+                face_region_all.append(
+                    self.face_detection(
+                        frames[detection_freq * idx],
+                        backend,
+                        use_larger_box,
+                        larger_box_coef,
+                    )
+                )
             else:
                 face_region_all.append([0, 0, frames.shape[1], frames.shape[2]])
-        face_region_all = np.asarray(face_region_all, dtype='int')
+        face_region_all = np.asarray(face_region_all, dtype="int")
         if use_median_box:
             # Generate a median bounding box based on all detected face regions
-            face_region_median = np.median(face_region_all, axis=0).astype('int')
+            face_region_median = np.median(face_region_all, axis=0).astype("int")
 
         # Frame Resizing
-        resized_frames = np.zeros((frames.shape[0], height, width, 3))
-        for i in range(0, frames.shape[0]):
+        total_frames, _, _, channels = frames.shape
+        resized_frames = np.zeros((total_frames, height, width, channels))
+        for i in range(0, total_frames):
             frame = frames[i]
             if use_dynamic_detection:  # use the (i // detection_freq)-th facial region.
                 reference_index = i // detection_freq
@@ -401,9 +766,18 @@ class BaseLoader(Dataset):
                     face_region = face_region_median
                 else:
                     face_region = face_region_all[reference_index]
-                frame = frame[max(face_region[1], 0):min(face_region[1] + face_region[3], frame.shape[0]),
-                        max(face_region[0], 0):min(face_region[0] + face_region[2], frame.shape[1])]
-            resized_frames[i] = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+                frame = frame[
+                    max(face_region[1], 0) : min(
+                        face_region[1] + face_region[3], frame.shape[0]
+                    ),
+                    max(face_region[0], 0) : min(
+                        face_region[0] + face_region[2], frame.shape[1]
+                    ),
+                ]
+            resized_frames[i] = cv2.resize(
+                frame, (width, height), interpolation=cv2.INTER_AREA
+            )
+        print("leaving crop face")
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):
@@ -462,9 +836,17 @@ class BaseLoader(Dataset):
             os.makedirs(self.cached_path, exist_ok=True)
         count = 0
         for i in range(len(bvps_clips)):
-            assert (len(self.inputs) == len(self.labels))
-            input_path_name = self.cached_path + os.sep + "{0}_input{1}.npy".format(filename, str(count))
-            label_path_name = self.cached_path + os.sep + "{0}_label{1}.npy".format(filename, str(count))
+            assert len(self.inputs) == len(self.labels)
+            input_path_name = (
+                self.cached_path
+                + os.sep
+                + "{0}_input{1}.npy".format(filename, str(count))
+            )
+            label_path_name = (
+                self.cached_path
+                + os.sep
+                + "{0}_label{1}.npy".format(filename, str(count))
+            )
             self.inputs.append(input_path_name)
             self.labels.append(label_path_name)
             np.save(input_path_name, frames_clips[i])
@@ -472,7 +854,7 @@ class BaseLoader(Dataset):
             count += 1
         return count
 
-    def save_multi_process(self, frames_clips, bvps_clips, filename):
+    def save_multi_process(self, frames_clips, bvps_clips, bvps_clips_pseudo, filename):
         """Save all the chunked data with multi-thread processing.
 
         Args:
@@ -490,7 +872,7 @@ class BaseLoader(Dataset):
         label_path_name_list = []
         label_pseudo_path_name_list = []
         print(f"saving filename:{filename}")
-        if self.infer_dataset == "DST" or self.infer_dataset == "RAVDESS":
+        if self.infer_dataset == "DST":
             for i in range(len(frames_clips)):
                 assert len(self.inputs) == len(self.labels), "Not processing this video"
                 input_path_name = (
@@ -542,8 +924,10 @@ class BaseLoader(Dataset):
                 label_pseudo_path_name_list,
             )
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
-        """Allocate dataset preprocessing across multiple processes.
+    def multi_process_manager(
+        self, data_dirs, config_preprocess, multi_process_quota=6
+    ):
+        """Allocate dataset preprocessing across multiple processes with status monitoring.
 
         Args:
             data_dirs(List[str]): a list of video_files.
@@ -552,16 +936,22 @@ class BaseLoader(Dataset):
         Returns:
             file_list_dict(Dict): Dictionary containing information regarding processed data ( path names)
         """
-        print('Preprocessing dataset...')
+        import time
+
+        print("Preprocessing dataset...")
         file_num = len(data_dirs)
         choose_range = range(0, file_num)
-        pbar = tqdm(list(choose_range))
+        pbar = tqdm(list(choose_range), desc="Processing files")
 
         # shared data resource
-        manager = Manager()  # multi-process manager
-        file_list_dict = manager.dict()  # dictionary for all processes to store processed files
-        p_list = []  # list of processes
+        manager = mp.Manager()  # multi-process manager
+        file_list_dict = (
+            manager.dict()
+        )  # dictionary for all processes to store processed files
+        p_list = []  # list of processes with metadata
         running_num = 0  # number of running processes
+        completed_files = 0
+        failed_files = []
 
         # in range of number of files to process
         for i in choose_range:
@@ -569,23 +959,113 @@ class BaseLoader(Dataset):
             while process_flag:  # ensure that every i creates a process
                 if running_num < multi_process_quota:  # in case of too many processes
                     # send data to be preprocessing task
-                    p = Process(target=self.preprocess_dataset_subprocess,
-                                args=(data_dirs,config_preprocess, i, file_list_dict))
+                    p = mp.Process(
+                        target=self.preprocess_dataset_subprocess,
+                        args=(data_dirs, config_preprocess, i, file_list_dict),
+                        name=f"PreprocessWorker-{i}",
+                    )
                     p.start()
-                    p_list.append(p)
+                    p_info = {
+                        "process": p,
+                        "file_idx": i,
+                        "filename": data_dirs[i]["index"],
+                    }
+                    p_list.append(p_info)
                     running_num += 1
                     process_flag = False
-                for p_ in p_list:
-                    if not p_.is_alive():
-                        p_list.remove(p_)
-                        p_.join()
+                    print(
+                        f"Started process {p.pid} for file {i}: {data_dirs[i]['index']}"
+                    )
+
+                # Check and clean up finished processes
+                finished_processes = []
+                for p_info in p_list:
+                    p = p_info["process"]
+                    if not p.is_alive():
+                        p.join()  # Wait up to 1 second for cleanup
+
+                        if p.exitcode == 0:
+                            print(
+                                f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+                            )
+                            completed_files += 1
+                        else:
+                            print(
+                                f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+                                f"(exit code: {p.exitcode})"
+                            )
+                            failed_files.append(
+                                {
+                                    "idx": p_info["file_idx"],
+                                    "filename": p_info["filename"],
+                                    "exit_code": p.exitcode,
+                                }
+                            )
+
+                        finished_processes.append(p_info)
                         running_num -= 1
                         pbar.update(1)
-        # join all processes
-        for p_ in p_list:
-            p_.join()
-            pbar.update(1)
+
+                # Remove finished processes from list
+                for p_info in finished_processes:
+                    p_list.remove(p_info)
+
+                # Small delay to prevent busy waiting
+                if running_num >= multi_process_quota:
+                    time.sleep(0.1)
+
+        # Wait for remaining processes to complete
+        print(f"\nWaiting for {len(p_list)} remaining processes to complete...")
+
+        while p_list:
+            finished_processes = []
+            for p_info in p_list:
+                p = p_info["process"]
+
+                if not p.is_alive():
+                    p.join(timeout=1.0)
+
+                    if p.exitcode == 0:
+                        print(
+                            f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+                        )
+                        completed_files += 1
+                    else:
+                        print(
+                            f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+                            f"(exit code: {p.exitcode})"
+                        )
+                        failed_files.append(
+                            {
+                                "idx": p_info["file_idx"],
+                                "filename": p_info["filename"],
+                                "exit_code": p.exitcode,
+                            }
+                        )
+
+                    finished_processes.append(p_info)
+                    pbar.update(1)
+
+            # Remove finished processes
+            for p_info in finished_processes:
+                p_list.remove(p_info)
+
+            if p_list:
+                time.sleep(1)  # Check every second for remaining processes
+
         pbar.close()
+
+        # Print final summary
+        print("\nPREPROCESSING SUMMARY:")
+        print(f"   Completed: {completed_files}/{file_num}")
+        print(f"   Failed: {len(failed_files)}/{file_num}")
+
+        if failed_files:
+            print("\nFAILED FILES:")
+            for fail in failed_files:
+                print(
+                    f"   File {fail['idx']}: {fail['filename']} (exit code: {fail['exit_code']})"
+                )
 
         return file_list_dict
 
@@ -604,14 +1084,14 @@ class BaseLoader(Dataset):
             file_list = file_list + file_paths
 
         if not file_list:
-            raise ValueError(self.dataset_name, 'No files in file list')
+            raise ValueError(self.dataset_name, "No files in file list")
 
-        file_list_df = pd.DataFrame(file_list, columns=['input_files'])
+        file_list_df = pd.DataFrame(file_list, columns=["input_files"])
         os.makedirs(os.path.dirname(self.file_list_path), exist_ok=True)
         file_list_df.to_csv(self.file_list_path)  # save file list to .csv
 
     def build_file_list_retroactive(self, data_dirs, begin, end):
-        """ If a file list has not already been generated for a specific data split build a list of files
+        """If a file list has not already been generated for a specific data split build a list of files
         used by the dataloader for the data split. Eg. list of files used for
         train / val / test. Also saves the list to a .csv file.
 
@@ -629,40 +1109,62 @@ class BaseLoader(Dataset):
         # generate a list of unique raw-data file names
         filename_list = []
         for i in range(len(data_dirs_subset)):
-            filename_list.append(data_dirs_subset[i]['index'])
+            filename_list.append(data_dirs_subset[i]["index"])
         filename_list = list(set(filename_list))  # ensure all indexes are unique
 
         # generate a list of all preprocessed / chunked data files
         file_list = []
         for fname in filename_list:
-            processed_file_data = list(glob.glob(self.cached_path + os.sep + "{0}_input*.npy".format(fname)))
+            if self.infer_dataset == "MMPD":
+                processed_file_data = list(
+                    glob.glob(
+                        self.cached_path
+                        + os.sep
+                        + "subject{0}*_input*.npy".format(fname)
+                    )
+                )
+            else:
+                processed_file_data = list(
+                    glob.glob(
+                        self.cached_path + os.sep + "{0}_input*.npy".format(fname)
+                    )
+                )
+
             file_list += processed_file_data
 
         if not file_list:
-            raise ValueError(self.dataset_name,
-                             'File list empty. Check preprocessed data folder exists and is not empty.')
+            raise ValueError(
+                self.dataset_name,
+                "File list empty. Check preprocessed data folder exists and is not empty.",
+            )
 
-        file_list_df = pd.DataFrame(file_list, columns=['input_files'])
+        file_list_df = pd.DataFrame(file_list, columns=["input_files"])
         os.makedirs(os.path.dirname(self.file_list_path), exist_ok=True)
         file_list_df.to_csv(self.file_list_path)  # save file list to .csv
 
     def load_preprocessed_data(self):
-        """ Loads the preprocessed data listed in the file list.
+        """Loads the preprocessed data listed in the file list.
 
         Args:
             None
         Returns:
             None
         """
+        print("In load_preprocessed_data")
         file_list_path = self.file_list_path  # get list of files in
         file_list_df = pd.read_csv(file_list_path)
-        inputs = file_list_df['input_files'].tolist()
+        inputs = file_list_df["input_files"].tolist()
         if not inputs:
-            raise ValueError(self.dataset_name + ' dataset loading data error!')
+            raise ValueError(self.dataset_name + " dataset loading data error!")
         inputs = sorted(inputs)  # sort input file name list
         labels = [input_file.replace("input", "label") for input_file in inputs]
+        labels_pseudo = [
+            input_file.replace("input", "label_pseudo") for input_file in inputs
+        ]
+
         self.inputs = inputs
         self.labels = labels
+        self.labels_pseudo = labels_pseudo
         self.preprocessed_data_len = len(inputs)
 
     @staticmethod
@@ -672,11 +1174,14 @@ class BaseLoader(Dataset):
         diffnormalized_len = n - 1
         diffnormalized_data = np.zeros((diffnormalized_len, h, w, c), dtype=np.float32)
         diffnormalized_data_padding = np.zeros((1, h, w, c), dtype=np.float32)
-        for j in range(diffnormalized_len):
-            diffnormalized_data[j, :, :, :] = (data[j + 1, :, :, :] - data[j, :, :, :]) / (
-                    data[j + 1, :, :, :] + data[j, :, :, :] + 1e-7)
+        for j in range(diffnormalized_len - 1):
+            diffnormalized_data[j, :, :, :] = (
+                data[j + 1, :, :, :] - data[j, :, :, :]
+            ) / (data[j + 1, :, :, :] + data[j, :, :, :] + 1e-7)
         diffnormalized_data = diffnormalized_data / np.std(diffnormalized_data)
-        diffnormalized_data = np.append(diffnormalized_data, diffnormalized_data_padding, axis=0)
+        diffnormalized_data = np.append(
+            diffnormalized_data, diffnormalized_data_padding, axis=0
+        )
         diffnormalized_data[np.isnan(diffnormalized_data)] = 0
         return diffnormalized_data
 
@@ -706,9 +1211,30 @@ class BaseLoader(Dataset):
         return label
 
     @staticmethod
+    def skin_segment_data(data):
+        "Use bob skinfilter package to get the skin segmentation used in rPPGnet"
+        from bob.ip.skincolorfilter import SkinColorFilter
+
+        n, h, w, c = data.shape
+        skin_mask = np.zeros((n, h, w), dtype=np.bool)
+        skin_filter = SkinColorFilter()
+        skin_filter.estimate_gaussian_parameters(np.moveaxis(data[0, :, :, :], -1, 0))
+        for i in range(n):
+            frame = data[i, :, :, :]
+            frame = np.moveaxis(frame, -1, 0)
+            skin_mask[i, :, :] = skin_filter.get_skin_mask(frame, 0.3)
+        n, h, w = skin_mask.shape
+        skin_mask = skin_mask.reshape((n, h, w, 1))
+        print("skin shape", skin_mask.shape)
+        return skin_mask
+
+    # face_image = numpy.moveaxis(face_image, -1, 0)
+
+    @staticmethod
     def resample_ppg(input_signal, target_length):
         """Samples a PPG sequence into specific length."""
         return np.interp(
-            np.linspace(
-                1, input_signal.shape[0], target_length), np.linspace(
-                1, input_signal.shape[0], input_signal.shape[0]), input_signal)
+            np.linspace(1, input_signal.shape[0], target_length),
+            np.linspace(1, input_signal.shape[0], input_signal.shape[0]),
+            input_signal,
+        )

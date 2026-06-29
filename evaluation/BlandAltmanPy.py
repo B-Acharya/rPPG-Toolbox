@@ -9,7 +9,7 @@ from scipy.stats import gaussian_kde
 
 class BlandAltman():
 
-    def __init__(self,gold_std,new_measure,config,averaged=False):
+    def __init__(self,gold_std,new_measure,config=None,logger=None,averaged=False, plot=True):
         # set averaged to True if multiple observations from each participant are averaged together to get one value
         import pandas as pd
 
@@ -30,6 +30,8 @@ class BlandAltman():
 
         self.gold_std = gold_std
         self.new_measure = new_measure
+        self.logger = logger
+        self.plot = plot
 
         # Calculate Bland-Altman statistics
         diffs = gold_std - new_measure
@@ -49,16 +51,19 @@ class BlandAltman():
             self.CI95 = [self.mean_error + 1.96 * diffs_std, self.mean_error - 1.96 * diffs_std]
 
         # Define save path
-        if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test':
-            self.save_path  = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'bland_altman_plots')
-        elif config.TOOLBOX_MODE == 'unsupervised_method':
-            self.save_path  = os.path.join(config.LOG.PATH, config.UNSUPERVISED.DATA.EXP_DATA_NAME, 'bland_altman_plots')
+        if config != None:
+            if config.TOOLBOX_MODE == 'train_and_test' or config.TOOLBOX_MODE == 'only_test' or config.TOOLBOX_MODE == "LOO" or config.TOOLBOX_MODE == "LOO_test" or config.TOOLBOX_MODE == "ENRICH":
+                self.save_path  = os.path.join(config.LOG.PATH, config.TEST.DATA.EXP_DATA_NAME, 'bland_altman_plots')
+            elif config.TOOLBOX_MODE == 'unsupervised_method':
+                self.save_path  = os.path.join(config.LOG.PATH, config.UNSUPERVISED.DATA.EXP_DATA_NAME, 'bland_altman_plots')
+            else:
+                raise ValueError('TOOLBOX_MODE only supports train_and_test, only_test, or unsupervised_method!')
         else:
-            raise ValueError('TOOLBOX_MODE only supports train_and_test, only_test, or unsupervised_method!')
-        
-        # Make the save path, if needed
-        if not os.path.exists(self.save_path):
-            os.makedirs(self.save_path, exist_ok=True)
+            self.save_path = "./"
+
+            # Make the save path, if needed
+            if not os.path.exists(self.save_path):
+                os.makedirs(self.save_path, exist_ok=True)
 
     def print_stats(self,round_amount = 5):
         print("Mean error = {}".format(round(self.mean_error,round_amount)))
@@ -102,9 +107,10 @@ class BlandAltman():
 
         fig = plt.figure(figsize=figure_size)
         ax=fig.add_axes([0,0,1,1])
-        xy = np.vstack([self.gold_std,self.new_measure])
-        z = gaussian_kde(xy)(xy)
-        ax.scatter(self.gold_std,self.new_measure, c=z, s=50)
+        # xy = np.vstack([self.gold_std,self.new_measure])
+        # z = gaussian_kde(xy)(xy)
+        # ax.scatter(self.gold_std, self.new_measure, c=z, s=50)
+        ax.scatter(self.gold_std, self.new_measure)
         x_vals = np.array(ax.get_xlim())
         ax.plot(x_vals,x_vals,'--',color='black', label='Line of Slope = 1')
         ax.set_xlabel(x_label)
@@ -113,8 +119,14 @@ class BlandAltman():
         ax.grid()
         plt.xlim(measure_lower_lim, measure_upper_lim)
         plt.ylim(measure_lower_lim, measure_upper_lim)
-        plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=300)
-        print(f"Saved {file_name} to {self.save_path}.")
+        if self.logger!= None:
+            self.logger.experiment.log_figure(figure=plt, figure_name="Scatter-Plot")
+        if self.plot:
+            plt.show()
+        else:
+            plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=300)
+            print(f"Saved {file_name} to {self.save_path}.")
+        plt.close('all')
 
     def difference_plot(self,x_label='Difference between rPPG HR and ECG HR [bpm]',
                         y_label='Average of rPPG HR and ECG HR [bpm]',averaged=False,
@@ -131,9 +143,11 @@ class BlandAltman():
 
         fig = plt.figure(figsize=figure_size)
         ax = fig.add_axes([0,0,1,1])
-        xy = np.vstack([avgs,diffs])
-        z = gaussian_kde(xy)(xy)
-        ax.scatter(avgs,diffs, c=z, label='Observations')
+        # xy = np.vstack([avgs,diffs])
+        # z = gaussian_kde(xy)(xy)
+        # ax.scatter(avgs,diffs, c=z, label='Observations')
+        ax.scatter(avgs, diffs, label='Observations')
+
         x_vals = np.array(ax.get_xlim())
         ax.axhline(self.mean_error,color='black',label='Mean Error')
         ax.axhline(self.CI95[0],color='black',linestyle='--',label='+95% Confidence Interval')
@@ -144,5 +158,12 @@ class BlandAltman():
         if show_legend:
             ax.legend()
         ax.grid()
-        plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=100)
-        print(f"Saved {file_name} to {self.save_path}.")
+        if self.logger != None:
+            self.logger.experiment.log_figure(figure=plt, figure_name="Difference-Plot")
+
+        if self.plot:
+            plt.show()
+        else:
+            plt.savefig(os.path.join(self.save_path, file_name),bbox_inches='tight', dpi=100)
+            print(f"Saved {file_name} to {self.save_path}.")
+        plt.close('all')

@@ -10,8 +10,8 @@ from numpy.typing import NDArray
 
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
-class RAVDESSLoader(BaseLoader):
-    """The RAVDESS data loader"""
+class MEADLoader(BaseLoader):
+    """The MEAD data loader"""
 
     def __init__(
             self,
@@ -24,18 +24,24 @@ class RAVDESSLoader(BaseLoader):
             sensor_type=None,  # Added to match the same path to all the datasets
             pseudo_label_type=None,
             transform=None,):
-        """Initializes a RAVDESS dataloader.
+        """Initializes a MEAD dataloader.
         Args:
             data_path(str): path of a folder which stores raw video.
             e.g. data_path should be "RawData" for below dataset structure:
             -----------------
                  RawData/
-                 |   |-- Actor_01/
-                 |      |-- 01-02-01-01-01-01-01/
-                 |         |-- 01-02-01-01-01-01-01.mp4
-                 |      |-- 01-02-01-01-01-02-01/
-                 |         |-- 01-02-01-01-01-01-02.mp4
-                 |   |-- Actor_02/
+                 |   |-- M003/
+                 |      |-- perspective/ (e.g. top, left)
+                 |         |-- emotion/ (e.g. angry, surprised)
+                 |              |-- level/ (e.g. level_1, level_2)
+                 |                  |-- 001.mp4
+                 |                  |-- 002.mp4
+                 |   |-- M004/
+                 |      |-- perspective/ (e.g. top, left)
+                 |         |-- emotion/ (e.g. angry, surprised)
+                 |              |-- level/ (e.g. level_1, level_2)
+                 |                  |-- 001.mp4
+                 |                  |-- 002.mp4
             -----------------
             name(str): name of the dataloader.
             config_data(CfgNode): data settings(ref:config.py).
@@ -67,18 +73,19 @@ class RAVDESSLoader(BaseLoader):
         dirs = list()
         data_dirs = glob.glob(data_path + os.sep + "*")
 
-        for data_dir in data_dirs:
-            for sub_dir in glob.glob(data_dir + os.sep + "*"):
-                subject = int(os.path.split(data_dir)[-1].split("_")[-1])
-                video_dir = sub_dir.split(os.sep)[-1]
-                video_path = os.path.join(data_dir, sub_dir)
-                dirs.append(
-                    {
-                        "index": f"{subject}_{video_dir}",
-                        "subject": subject,
-                        "path": video_path,
-                    }
-                )
+        for subject in data_dirs:
+            for perspective in glob.glob(subject + os.sep + "video" + os.sep + "*"):
+                for emotion in glob.glob(perspective + os.sep + "*"):
+                    for level in glob.glob(emotion + os.sep + "*"):
+                        sublevel = glob.glob(level + os.sep + "*")
+                        for vid in sublevel:
+                            subject_index = subject.split(os.sep)[-1]
+                            dirs.append(
+                                {
+                                    "index": subject_index,
+                                    "path": vid,
+                                }
+                            )
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
         return dirs
@@ -116,30 +123,28 @@ class RAVDESSLoader(BaseLoader):
         filename = os.path.split(data_dirs[i]["path"])[-1]
         saved_filename = data_dirs[i]["index"]
         video_path = data_dirs[i]["path"]
-        print("Processing video: ", video_path)
-        frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
 
-        if self.pseudo_label_type == "POS_UF":
-            print("Using unfiltered POS to generate pseudo_labels")
-            bvps = self.generate_pos_uf(frames, fs=self.fs)
-        elif self.pseudo_label_type == "CHROM":
-            print("Using CHROM to generate pseudo_labels")
-            bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
-        else:
-            raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
+        frames = self.read_video(video_path)
+        bvps = self.generate_pos_uf(frames, fs=self.fs)
 
         frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
             frames, bvps, config_preprocess
         )
-        bvps_pseudo_clips = bvps
 
-        # preprocessing required for the pseudo labels
-        chunk_length = config_preprocess.CHUNK_LENGTH
-        clip_num = frames.shape[0] // chunk_length
+        if self.pseudo_label_type == "POS_UF":
+            print("Using unfiltered POS to generate pseudo_labels")
+            bvps_pseudo_clips = bvps
 
-        bvps_pseudo_clips = self._preprocess_for_alignment(
-            bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
-        )
+            # preprocessing required for the pseudo labels
+            chunk_length = config_preprocess.CHUNK_LENGTH
+            clip_num = frames.shape[0] // chunk_length
+
+            bvps_pseudo_clips = self._preprocess_for_alignment(
+                bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+            )
+        else:
+            pass
+
         input_name_list, label_name_list, _ = (
             self.save_multi_process(
                 frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
@@ -172,19 +177,18 @@ class RAVDESSLoader(BaseLoader):
 
     @staticmethod
     def read_video(video_file):
-        """Reads face crops from HDF5, returns (T, H, W, 3)."""
-        with h5py.File(video_file, "r") as f:
-            if "faces" not in f:
-                raise KeyError(
-                    f"'faces' key not found in {video_file}. Available: {list(f.keys())}"
-                )
-            return np.array(f["faces"])
-
-    @staticmethod
-    def check_video_length(video_file):
-        """Checks if video is at least 100 frames long."""
+        """Reads a video file, returns frames(T,H,W,3)"""
+        print("start of read_video")
         VidObj = cv2.VideoCapture(video_file)
-        frame_count = int(VidObj.get(cv2.CAP_PROP_FRAME_COUNT))
-        if frame_count < 100:
-            return False
-        return True
+        VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
+        success, frame = VidObj.read()
+        frames = list()
+        while success:
+            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
+            frame = np.asarray(frame)
+            if np.isnan(frame).any():
+                frame[np.isnan(frame)] = 0  # TODO: maybe change into avg
+            frames.append(frame)
+            success, frame = VidObj.read()
+        print("end of read_video")
+        return np.asarray(frames)

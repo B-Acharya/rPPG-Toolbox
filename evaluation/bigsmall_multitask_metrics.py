@@ -8,6 +8,7 @@ from evaluation.post_process import _detrend, _next_power_of_2, _calculate_SNR
 from tqdm import tqdm
 from evaluation.BlandAltmanPy import BlandAltman
 
+
 # PPG Metrics
 def calculate_bvp_metrics(predictions, labels, config):
     """Calculate PPG Metrics (MAE, RMSE, MAPE, Pearson Coef., SNR)."""
@@ -90,11 +91,12 @@ def calculate_resp_metrics(predictions, labels, config):
             window_frame_size = video_frame_size
 
         for i in range(0, len(prediction), window_frame_size):
-            pred_window = prediction[i:i+window_frame_size]
-            label_window = label[i:i+window_frame_size]
+            pred_window = prediction[i:i + window_frame_size]
+            label_window = label[i:i + window_frame_size]
 
             if len(pred_window) < 9:
-                print(f"Window frame size of {len(pred_window)} is smaller than minimum pad length of 9. Window ignored!")
+                print(
+                    f"Window frame size of {len(pred_window)} is smaller than minimum pad length of 9. Window ignored!")
                 continue
 
             if config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Standardized" or \
@@ -104,7 +106,7 @@ def calculate_resp_metrics(predictions, labels, config):
                 diff_flag_test = True
             else:
                 raise ValueError("Unsupported label type in testing!")
-            
+
             if config.INFERENCE.EVALUATION_METHOD == "peak detection":
                 gt_rr_peak, pred_rr_peak, SNR = calculate_resp_metrics_per_video(
                     prediction, label, diff_flag=diff_flag_test, fs=config.TEST.DATA.FS, rr_method='Peak')
@@ -136,12 +138,13 @@ def calculate_resp_metrics(predictions, labels, config):
                 print("FFT RMSE (FFT Label): {0} +/- {1}".format(RMSE_FFT, standard_error))
             elif metric == "MAPE":
                 MAPE_FFT = np.mean(np.abs((predict_rr_fft_all - gt_rr_fft_all) / gt_rr_fft_all)) * 100
-                standard_error = np.std(np.abs((predict_rr_fft_all - gt_rr_fft_all) / gt_rr_fft_all)) / np.sqrt(num_test_samples) * 100
+                standard_error = np.std(np.abs((predict_rr_fft_all - gt_rr_fft_all) / gt_rr_fft_all)) / np.sqrt(
+                    num_test_samples) * 100
                 print("FFT MAPE (FFT Label): {0} +/- {1}".format(MAPE_FFT, standard_error))
             elif metric == "Pearson":
                 Pearson_FFT = np.corrcoef(predict_rr_fft_all, gt_rr_fft_all)
                 correlation_coefficient = Pearson_FFT[0][1]
-                standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
+                standard_error = np.sqrt((1 - correlation_coefficient ** 2) / (num_test_samples - 2))
                 print("FFT Pearson (FFT Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
             elif metric == "SNR":
                 SNR_FFT = np.mean(SNR_all)
@@ -153,14 +156,14 @@ def calculate_resp_metrics(predictions, labels, config):
                 compare = BlandAltman(gt_rr_fft_all, predict_rr_fft_all, config, averaged=True)
                 compare.scatter_plot(
                     x_label='GT RR [bpm]',
-                    y_label='Predicted RR [bpm]', 
-                    show_legend=True, figure_size=(5, 5), 
-                    file_name=f'FFT_BlandAltman_ScatterPlot.pdf', 
-                    measure_lower_lim=10, 
+                    y_label='Predicted RR [bpm]',
+                    show_legend=True, figure_size=(5, 5),
+                    file_name=f'FFT_BlandAltman_ScatterPlot.pdf',
+                    measure_lower_lim=10,
                     measure_upper_lim=60)
                 compare.difference_plot(
-                    x_label='Difference between Predicted RR and GT RR [bpm]', 
-                    y_label='Average of Predicted RR and GT RR [bpm]', 
+                    x_label='Difference between Predicted RR and GT RR [bpm]',
+                    y_label='Average of Predicted RR and GT RR [bpm]',
                     show_legend=True, figure_size=(5, 5), file_name=f'FFT_BlandAltman_DifferencePlot.pdf')
             else:
                 raise ValueError("Wrong Test Metric Type")
@@ -180,12 +183,13 @@ def calculate_resp_metrics(predictions, labels, config):
                 print("PEAK RMSE (Peak Label): {0} +/- {1}".format(RMSE_PEAK, standard_error))
             elif metric == "MAPE":
                 MAPE_PEAK = np.mean(np.abs((predict_rr_peak_all - gt_rr_peak_all) / gt_rr_peak_all)) * 100
-                standard_error = np.std(np.abs((predict_rr_peak_all - gt_rr_peak_all) / gt_rr_peak_all)) / np.sqrt(num_test_samples) * 100
+                standard_error = np.std(np.abs((predict_rr_peak_all - gt_rr_peak_all) / gt_rr_peak_all)) / np.sqrt(
+                    num_test_samples) * 100
                 print("PEAK MAPE (Peak Label): {0} +/- {1}".format(MAPE_PEAK, standard_error))
             elif metric == "Pearson":
                 Pearson_PEAK = np.corrcoef(predict_rr_peak_all, gt_rr_peak_all)
                 correlation_coefficient = Pearson_PEAK[0][1]
-                standard_error = np.sqrt((1 - correlation_coefficient**2) / (num_test_samples - 2))
+                standard_error = np.sqrt((1 - correlation_coefficient ** 2) / (num_test_samples - 2))
                 print("PEAK Pearson (Peak Label): {0} +/- {1}".format(correlation_coefficient, standard_error))
             elif metric == "SNR":
                 SNR_PEAK = np.mean(SNR_all)
@@ -197,14 +201,14 @@ def calculate_resp_metrics(predictions, labels, config):
                 compare = BlandAltman(gt_rr_peak_all, predict_rr_peak_all, config, averaged=True)
                 compare.scatter_plot(
                     x_label='GT RR [bpm]',
-                    y_label='Predicted RR [bpm]', 
-                    show_legend=True, figure_size=(5, 5), 
-                    file_name=f'Peak_BlandAltman_ScatterPlot.pdf', 
-                    measure_lower_lim=10, 
+                    y_label='Predicted RR [bpm]',
+                    show_legend=True, figure_size=(5, 5),
+                    file_name=f'Peak_BlandAltman_ScatterPlot.pdf',
+                    measure_lower_lim=10,
                     measure_upper_lim=60)
                 compare.difference_plot(
-                    x_label='Difference between Predicted RR and GT RR [bpm]', 
-                    y_label='Average of Predicted RR and GT RR [bpm]', 
+                    x_label='Difference between Predicted RR and GT RR [bpm]',
+                    y_label='Average of Predicted RR and GT RR [bpm]',
                     show_legend=True, figure_size=(5, 5), file_name=f'Peak_BlandAltman_DifferencePlot.pdf')
             else:
                 raise ValueError("Wrong Test Metric Type")
@@ -253,10 +257,10 @@ def calculate_bp4d_au_metrics(preds, labels, config):
                 AU_data['preds'][named_AU[i]] = all_trial_preds[:, i]
 
             # Calculate F1
-            metric_dict = dict()  
+            metric_dict = dict()
             avg_f1 = 0
-            avg_prec = 0 
-            avg_acc = 0   
+            avg_prec = 0
+            avg_acc = 0
 
             print('')
             print('=====================')
@@ -275,10 +279,10 @@ def calculate_bp4d_au_metrics(preds, labels, config):
                 precision = precision[1]
                 recall = recall[1]
 
-                f1 = f1*100
-                precision = precision*100
-                recall = recall*100
-                acc = sum(1 for x,y in zip(preds,labels) if x == y) / len(labels) * 100
+                f1 = f1 * 100
+                precision = precision * 100
+                recall = recall * 100
+                acc = sum(1 for x, y in zip(preds, labels) if x == y) / len(labels) * 100
 
                 # save to dict
                 metric_dict[au] = (f1, precision, recall, acc)
@@ -287,14 +291,14 @@ def calculate_bp4d_au_metrics(preds, labels, config):
                 avg_f1 += f1
                 avg_prec += precision
                 avg_acc += acc
-                
+
                 # Print
                 print(au, f1, precision)
 
             # Save Dictionary
-            avg_f1 = avg_f1/len(named_AU)
-            avg_acc = avg_acc/len(named_AU)
-            avg_prec = avg_prec/len(named_AU)
+            avg_f1 = avg_f1 / len(named_AU)
+            avg_acc = avg_acc / len(named_AU)
+            avg_prec = avg_prec / len(named_AU)
 
             metric_dict['12AU_AvgF1'] = avg_f1
             metric_dict['12AU_AvgPrec'] = avg_prec

@@ -6,60 +6,90 @@ Stricker, R., Müller, S., Gross, H.-M.
 Non-contact Video-based Pulse Rate Measurement on a Mobile Service Robot
 in: Proc. 23st IEEE Int. Symposium on Robot and Human Interactive Communication (Ro-Man 2014), Edinburgh, Scotland, UK, pp. 1056 - 1062, IEEE 2014
 """
-import glob
+
 import glob
 import json
 import os
-import re
+import random
+from numpy.typing import NDArray
 
 import cv2
 import numpy as np
-from dataset.data_loader.BaseLoader import BaseLoader
-from tqdm import tqdm
+from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
+from syncpos.utils.alignsignals import AlignSignals
 
 
 class PURELoader(BaseLoader):
     """The data loader for the PURE dataset."""
 
-    def __init__(self, name, data_path, config_data):
+    num_of_participants = 10
+
+    def __init__(
+        self,
+        name,
+        data_path,
+        config_data,
+        model,
+        device,
+        align=None,
+        sensor_type=None,  # Added to match the same path to all the datasets
+        pseudo_label_type=None,
+        transform=None,
+    ):
         """Initializes an PURE dataloader.
-            Args:
-                data_path(str): path of a folder which stores raw video and bvp data.
-                e.g. data_path should be "RawData" for below dataset structure:
-                -----------------
-                     RawData/
-                     |   |-- 01-01/
-                     |      |-- 01-01/
-                     |      |-- 01-01.json
-                     |   |-- 01-02/
-                     |      |-- 01-02/
-                     |      |-- 01-02.json
-                     |...
-                     |   |-- ii-jj/
-                     |      |-- ii-jj/
-                     |      |-- ii-jj.json
-                -----------------
-                name(str): name of the dataloader.
-                config_data(CfgNode): data settings(ref:config.py).
+        Args:
+            data_path(str): path of a folder which stores raw video and bvp data.
+            e.g. data_path should be "RawData" for below dataset structure:
+            -----------------
+                 RawData/
+                 |   |-- 01-01/
+                 |      |-- 01-01/
+                 |      |-- 01-01.json
+                 |   |-- 01-02/
+                 |      |-- 01-02/
+                 |      |-- 01-02.json
+                 |...
+                 |   |-- ii-jj/
+                 |      |-- ii-jj/
+                 |      |-- ii-jj.json
+            -----------------
+            name(str): name of the dataloader.
+            config_data(CfgNode): data settings(ref:config.py).
         """
-        super().__init__(name, data_path, config_data)
+
+        if align is not None:
+            self.align_signals = AlignSignals(align, config_data.FS)
+        else:
+            self.align_signals = None
+
+        self.pseudo_label_type = pseudo_label_type
+
+        super().__init__(name, data_path, config_data, model, device, transform)
+        self.num_of_participants = 10
 
     def get_raw_data(self, data_path):
         """Returns data directories under the path(For PURE dataset)."""
 
-        data_dirs = glob.glob(data_path + os.sep + "*-*")
+        data_dirs = list(glob.glob(data_path + os.sep + "*-*"))
+        temp = list()
+        for data_dir in data_dirs:
+            if os.path.isdir(data_dir):
+                temp.append(data_dir)
+
+        data_dirs = temp
         if not data_dirs:
-            raise ValueError(self.dataset_name + " data paths empty!")
+            # raise ValueError(self.dataset_name + " data paths empty!")
+            pass
         dirs = list()
         for data_dir in data_dirs:
-            subject_trail_val = os.path.split(data_dir)[-1].replace('-', '')
+            subject_trail_val = os.path.split(data_dir)[-1].replace("-", "")
             index = int(subject_trail_val)
             subject = int(subject_trail_val[0:2])
             dirs.append({"index": index, "path": data_dir, "subject": subject})
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
-        """Returns a subset of data dirs, split with begin and end values, 
+        """Returns a subset of data dirs, split with begin and end values,
         and ensures no overlapping subjects between splits"""
 
         # return the full directory
@@ -69,17 +99,25 @@ class PURELoader(BaseLoader):
         # get info about the dataset: subject list and num vids per subject
         data_info = dict()
         for data in data_dirs:
-            subject = data['subject']
-            data_dir = data['path']
-            index = data['index']
+            subject = data["subject"]
+            data_dir = data["path"]
+            index = data["index"]
             # creates a dictionary of data_dirs indexed by subject number
             if subject not in data_info:  # if subject not in the data info dictionary
                 data_info[subject] = []  # make an emplty list for that subject
             # append a tuple of the filename, subject num, trial num, and chunk num
-            data_info[subject].append({"index": index, "path": data_dir, "subject": subject})
+            data_info[subject].append(
+                {"index": index, "path": data_dir, "subject": subject}
+            )
 
         subj_list = list(data_info.keys())  # all subjects by number ID (1-27)
         subj_list = sorted(subj_list)
+        print("Before Shuffle:", subj_list)
+        if self.shuffle:
+            random.Random(4).shuffle(subj_list)
+            print("After Shuffle:", subj_list)
+        else:
+            print("No Shuffle")
         num_subjs = len(subj_list)  # number of unique subjects
 
         # get split of data set (depending on start / end)
@@ -97,41 +135,127 @@ class PURELoader(BaseLoader):
 
         return data_dirs_new
 
-    def preprocess_dataset_subprocess(self, data_dirs, config_preprocess, i, file_list_dict):
-        """ Invoked by preprocess_dataset for multi_process. """
-        filename = os.path.split(data_dirs[i]['path'])[-1]
-        saved_filename = data_dirs[i]['index']
+    def split_raw_data_loo(self, data_dirs, participant_ids):
+        data_dirs_new = list()
+        for data_dir in data_dirs:
+            if data_dir["subject"] in participant_ids:
+                data_dirs_new.append(data_dir)
+        return data_dirs_new
 
-        # Read Frames
-        if 'None' in config_preprocess.DATA_AUG:
+    def preprocess_dataset_subprocess(
+        self, data_dirs, config_preprocess, i, file_list_dict
+    ):
+        """Invoked by preprocess_dataset for multi_process."""
+        filename = os.path.split(data_dirs[i]["path"])[-1]
+        saved_filename = data_dirs[i]["index"]
+        print("start with pre-process")
+
+        if "None" in config_preprocess.DATA_AUG:
+            print("reading Images")
             # Utilize dataset-specific function to read video
-            frames = self.read_video(
-                os.path.join(data_dirs[i]['path'], filename, ""))
-        elif 'Motion' in config_preprocess.DATA_AUG:
+            frames = self.read_video(os.path.join(data_dirs[i]["path"], ""))
+        elif "Motion" in config_preprocess.DATA_AUG:
             # Utilize general function to read video in .npy format
             frames = self.read_npy_video(
-                glob.glob(os.path.join(data_dirs[i]['path'], filename, '*.npy')))
+                glob.glob(os.path.join(data_dirs[i]["path"], filename, "*.npy"))
+            )
         else:
-            raise ValueError(f'Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}.')
+            raise ValueError(
+                f"Unsupported DATA_AUG specified for {self.dataset_name} dataset! Received {config_preprocess.DATA_AUG}."
+            )
 
-        # Read Labels
-        if config_preprocess.USE_PSUEDO_PPG_LABEL:
-            bvps = self.generate_pos_psuedo_labels(frames, fs=self.config_data.FS)
-        else:
-            bvps = self.read_wave(
-                os.path.join(data_dirs[i]['path'], "{0}.json".format(filename)))
+        bvps = self.read_wave(
+            os.path.join(self.raw_data_path, "{0}.json".format(filename))
+        )
 
         target_length = frames.shape[0]
         bvps = BaseLoader.resample_ppg(bvps, target_length)
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess)
-        input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, saved_filename)
+
+        if self.align_signals is not None:
+            bvp_pseudo = self.generate_pos_pseudo_labels(frames, fs=self.fs)
+
+            aligned_bvps, _, video_start_idx, video_end_idx = self.align_signals(
+                bvps, bvp_pseudo
+            )
+
+            print(f"start-> {video_start_idx}, end-> {video_end_idx}")
+
+            # create the synced video frames
+            frames = frames[video_start_idx:video_end_idx]
+
+            # aligned signals are preprocessed
+            frames_clips, bvps_aligned_clips, bvps_pseudo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+
+            # need similar preprocessing as the syncronized signal
+            chunk_length = config_preprocess.CHUNK_LENGTH
+            clip_num = frames.shape[0] // chunk_length
+            bvps_clips = self._preprocess_for_alignment(
+                bvps, config_preprocess, clip_num, chunk_length
+            )
+
+            #
+            input_name_list, label_name_list, label_pseudo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_aligned_clips, saved_filename
+                )
+            )
+
+        else:
+            frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
+                frames, bvps, config_preprocess
+            )
+
+            if self.pseudo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate pseudo_labels")
+                bvps_pseudo_clips = self.generate_pos_uf(frames, fs=self.fs)
+
+                # preprocessing required for the pseudo labels
+                chunk_length = config_preprocess.CHUNK_LENGTH
+                clip_num = frames.shape[0] // chunk_length
+
+                bvps_pseudo_clips = self._preprocess_for_alignment(
+                    bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
+                )
+            else:
+                pass
+
+            input_name_list, label_name_list, label_pseudo_name_list = (
+                self.save_multi_process(
+                    frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename
+                )
+            )
         file_list_dict[i] = input_name_list
 
     @staticmethod
+    def _preprocess_for_alignment(
+        bvps, config_preprocess, clip_num: int, chunk_length: int
+    ) -> NDArray:
+        if config_preprocess.LABEL_TYPE == "Raw":
+            pass
+        elif config_preprocess.LABEL_TYPE == "DiffNormalized":
+            bvps = BaseLoader.diff_normalize_label(bvps)
+        elif config_preprocess.LABEL_TYPE == "Standardized":
+            bvps = BaseLoader.standardized_label(bvps)
+        else:
+            raise ValueError("Unsupported label type!")
+
+        if config_preprocess.DO_CHUNK:  # chunk data into snippets
+            bvps_clips = [
+                bvps[i * chunk_length : (i + 1) * chunk_length] for i in range(clip_num)
+            ]
+            bvps_clips = np.array(bvps_clips)
+        else:
+            bvps_clips = np.array([bvps])
+
+        return bvps_clips
+
+    @staticmethod
     def read_video(video_file):
-        """Reads a video file, returns frames(T, H, W, 3) """
+        """Reads a video file, returns frames(T, H, W, 3)"""
         frames = list()
-        all_png = sorted(glob.glob(video_file + '*.png'))
+        all_png = sorted(glob.glob(video_file + "*.png"))
         for png_path in all_png:
             img = cv2.imread(png_path)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -143,6 +267,5 @@ class PURELoader(BaseLoader):
         """Reads a bvp signal file."""
         with open(bvp_file, "r") as f:
             labels = json.load(f)
-            waves = [label["Value"]["waveform"]
-                     for label in labels["/FullPackage"]]
+            waves = [label["Value"]["waveform"] for label in labels["/FullPackage"]]
         return np.asarray(waves)
