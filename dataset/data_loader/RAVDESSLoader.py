@@ -128,18 +128,23 @@ class RAVDESSLoader(BaseLoader):
         else:
             raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
 
-        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
-            frames, bvps, config_preprocess
-        )
-        bvps_pseudo_clips = bvps
+        min_len = min(frames.shape[0], bvps.shape[0])
+        frames = frames[:min_len]
+        bvps = bvps[:min_len]
 
-        # preprocessing required for the pseudo labels
+        assert frames.shape[0] == bvps.shape[0]
+
         chunk_length = config_preprocess.CHUNK_LENGTH
-        clip_num = frames.shape[0] // chunk_length
 
-        bvps_pseudo_clips = self._preprocess_for_alignment(
-            bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
-        )
+        usable_len = (min_len // chunk_length) * chunk_length
+
+        frames = frames[:usable_len]
+        bvps = bvps[:usable_len]
+
+        frames_clips, bvps_clips, _ = self.preprocess(frames, bvps, config_preprocess)
+
+        bvps_pseudo_clips = bvps_clips
+
         input_name_list, label_name_list, _ = (
             self.save_multi_process(
                 frames_clips, bvps_clips, bvps_pseudo_clips, saved_filename

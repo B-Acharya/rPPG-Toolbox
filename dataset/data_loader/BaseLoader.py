@@ -925,7 +925,7 @@ class BaseLoader(Dataset):
             )
 
     def multi_process_manager(
-        self, data_dirs, config_preprocess, multi_process_quota=6
+        self, data_dirs, config_preprocess, multi_process_quota=16
     ):
         """Allocate dataset preprocessing across multiple processes with status monitoring.
 
@@ -953,105 +953,111 @@ class BaseLoader(Dataset):
         completed_files = 0
         failed_files = []
 
+        for i in range(file_num):
+            self.preprocess_dataset_subprocess(data_dirs, config_preprocess, i, file_list_dict)
+            pbar.update(1)
+
         # in range of number of files to process
-        for i in choose_range:
-            process_flag = True
-            while process_flag:  # ensure that every i creates a process
-                if running_num < multi_process_quota:  # in case of too many processes
-                    # send data to be preprocessing task
-                    p = mp.Process(
-                        target=self.preprocess_dataset_subprocess,
-                        args=(data_dirs, config_preprocess, i, file_list_dict),
-                        name=f"PreprocessWorker-{i}",
-                    )
-                    p.start()
-                    p_info = {
-                        "process": p,
-                        "file_idx": i,
-                        "filename": data_dirs[i]["index"],
-                    }
-                    p_list.append(p_info)
-                    running_num += 1
-                    process_flag = False
-                    print(
-                        f"Started process {p.pid} for file {i}: {data_dirs[i]['index']}"
-                    )
-
-                # Check and clean up finished processes
-                finished_processes = []
-                for p_info in p_list:
-                    p = p_info["process"]
-                    if not p.is_alive():
-                        p.join()  # Wait up to 1 second for cleanup
-
-                        if p.exitcode == 0:
-                            print(
-                                f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
-                            )
-                            completed_files += 1
-                        else:
-                            print(
-                                f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
-                                f"(exit code: {p.exitcode})"
-                            )
-                            failed_files.append(
-                                {
-                                    "idx": p_info["file_idx"],
-                                    "filename": p_info["filename"],
-                                    "exit_code": p.exitcode,
-                                }
-                            )
-
-                        finished_processes.append(p_info)
-                        running_num -= 1
-                        pbar.update(1)
-
-                # Remove finished processes from list
-                for p_info in finished_processes:
-                    p_list.remove(p_info)
-
-                # Small delay to prevent busy waiting
-                if running_num >= multi_process_quota:
-                    time.sleep(0.1)
-
-        # Wait for remaining processes to complete
-        print(f"\nWaiting for {len(p_list)} remaining processes to complete...")
-
-        while p_list:
-            finished_processes = []
-            for p_info in p_list:
-                p = p_info["process"]
-
-                if not p.is_alive():
-                    p.join(timeout=1.0)
-
-                    if p.exitcode == 0:
-                        print(
-                            f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
-                        )
-                        completed_files += 1
-                    else:
-                        print(
-                            f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
-                            f"(exit code: {p.exitcode})"
-                        )
-                        failed_files.append(
-                            {
-                                "idx": p_info["file_idx"],
-                                "filename": p_info["filename"],
-                                "exit_code": p.exitcode,
-                            }
-                        )
-
-                    finished_processes.append(p_info)
-                    pbar.update(1)
-
-            # Remove finished processes
-            for p_info in finished_processes:
-                p_list.remove(p_info)
-
-            if p_list:
-                time.sleep(1)  # Check every second for remaining processes
+        # for i in choose_range:
+        #     start = time.time()
+        #     process_flag = True
+        #     while process_flag:  # ensure that every i creates a process
+        #         if running_num < multi_process_quota:  # in case of too many processes
+        #             # send data to be preprocessing task
+        #             p = mp.Process(
+        #                 target=self.preprocess_dataset_subprocess,
+        #                 args=(data_dirs, config_preprocess, i, file_list_dict),
+        #                 name=f"PreprocessWorker-{i}",
+        #             )
+        #             p.start()
+        #             p_info = {
+        #                 "process": p,
+        #                 "file_idx": i,
+        #                 "filename": data_dirs[i]["index"],
+        #             }
+        #             p_list.append(p_info)
+        #             running_num += 1
+        #             process_flag = False
+        #             print(
+        #                 f"Started process {p.pid} for file {i}: {data_dirs[i]['index']}"
+        #             )
+        #
+        #         # Check and clean up finished processes
+        #         finished_processes = []
+        #         for p_info in p_list:
+        #             p = p_info["process"]
+        #             if not p.is_alive():
+        #                 p.join()  # Wait up to 1 second for cleanup
+        #
+        #                 if p.exitcode == 0:
+        #                     print(
+        #                         f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+        #                     )
+        #                     completed_files += 1
+        #                 else:
+        #                     print(
+        #                         f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+        #                         f"(exit code: {p.exitcode})"
+        #                     )
+        #                     failed_files.append(
+        #                         {
+        #                             "idx": p_info["file_idx"],
+        #                             "filename": p_info["filename"],
+        #                             "exit_code": p.exitcode,
+        #                         }
+        #                     )
+        #
+        #                 finished_processes.append(p_info)
+        #                 running_num -= 1
+        #                 pbar.update(1)
+        #
+        #         # Remove finished processes from list
+        #         for p_info in finished_processes:
+        #             p_list.remove(p_info)
+        #
+        #         # Small delay to prevent busy waiting
+        #         if running_num >= multi_process_quota:
+        #             time.sleep(0.1)
+        #     print(time.time() - start)
+        #
+        # # Wait for remaining processes to complete
+        # print(f"\nWaiting for {len(p_list)} remaining processes to complete...")
+        #
+        # while p_list:
+        #     finished_processes = []
+        #     for p_info in p_list:
+        #         p = p_info["process"]
+        #
+        #         if not p.is_alive():
+        #             p.join(timeout=1.0)
+        #
+        #             if p.exitcode == 0:
+        #                 print(
+        #                     f"Process {p.pid} completed file {p_info['file_idx']}: {p_info['filename']}"
+        #                 )
+        #                 completed_files += 1
+        #             else:
+        #                 print(
+        #                     f"Process {p.pid} FAILED for file {p_info['file_idx']}: {p_info['filename']} "
+        #                     f"(exit code: {p.exitcode})"
+        #                 )
+        #                 failed_files.append(
+        #                     {
+        #                         "idx": p_info["file_idx"],
+        #                         "filename": p_info["filename"],
+        #                         "exit_code": p.exitcode,
+        #                     }
+        #                 )
+        #
+        #             finished_processes.append(p_info)
+        #             pbar.update(1)
+        #
+        #     # Remove finished processes
+        #     for p_info in finished_processes:
+        #         p_list.remove(p_info)
+        #
+        #     if p_list:
+        #         time.sleep(1)  # Check every second for remaining processes
 
         pbar.close()
 

@@ -7,6 +7,11 @@ import h5py
 import numpy as np
 from syncpos.utils.alignsignals import AlignSignals
 from numpy.typing import NDArray
+from pathlib import Path
+import subprocess
+import json
+import time
+import shutil
 
 from rPPG_Toolbox.dataset.data_loader.BaseLoader import BaseLoader
 
@@ -66,28 +71,87 @@ class MEADLoader(BaseLoader):
             self.use_predefined_splits = True
 
         self.pseudo_label_type = pseudo_label_type
+        self.config_data = config_data
 
         super().__init__(name, data_path, config_data, model)
 
     def get_raw_data(self, data_path):
         dirs = list()
         data_dirs = glob.glob(data_path + os.sep + "*")
+        # db_file_path = "/homes/cgerz/datasets/mead_frame_counts.json"
+        # db_file = self.load_db(db_file_path)
+
+        # dst_root = Path("/data/rppg_20_mead_video_nt_lab/processed/tmp")
+        # src_root = Path("/data/rppg_20_mead_video_nt_lab/processed/cropped_face")
+
 
         for subject in data_dirs:
             for perspective in glob.glob(subject + os.sep + "video" + os.sep + "*"):
+                perspective_name = perspective.split(os.sep)[-1]
+                # if perspective_name != "front":
+                #     print(f"Skipping perspective {perspective_name} for subject {subject}")
+                #     continue
                 for emotion in glob.glob(perspective + os.sep + "*"):
+                    emotion_name = emotion.split(os.sep)[-1]
+                    # if emotion_name != "happy":
+                    #     print(f"Skipping emotion {emotion_name} for subject {subject} and perspective {perspective_name}")
+                    #     continue
                     for level in glob.glob(emotion + os.sep + "*"):
                         sublevel = glob.glob(level + os.sep + "*")
+                        level_name = level.split(os.sep)[-1]
                         for vid in sublevel:
+                            start = time.time()
                             subject_index = subject.split(os.sep)[-1]
+                            vid_name = vid.split(os.sep)[-1]
+                            vid_content = os.listdir(vid)
+                            if "data_faces.hdf5" not in vid_content:
+                                print(f"Skipping video {vid} because data_faces.hdf5 not found")
+                                continue
+                            # data_faces_path = os.path.join(vid, "data_faces.hdf5")
+                            # relative_path = Path(data_faces_path).relative_to(src_root)
+                            # dst = dst_root / relative_path
+                            #
+                            # parts = Path(data_faces_path).parts
+                            # root = Path(*parts[:3])
+                            # emotion_path = Path(*parts[5:-2])
+                            # clip_id = parts[-2]
+                            #
+                            # new_path = (
+                            #         root
+                            #         / "raw"
+                            #         / emotion_path
+                            #         / f"{clip_id}.mp4"
+                            # )
+                            #
+                            # if data_faces_path not in db_file:
+                            #     duration = self.read_video(data_faces_path).shape[0]
+                            #     print(f"Video {new_path} has duration {duration} frames")
+                            #     print(f"Add video {new_path} with duration {duration} to db_file")
+                            #     db_file[data_faces_path] = duration
+                            # else:
+                            #     duration = db_file[data_faces_path]
+                            #
+                            # if duration < self.config_data.PREPROCESS.CHUNK_LENGTH:
+                            #     print("data_faces_path", data_faces_path)
+                            #     print("dst", dst)
+                            #     print("dst", dst.parent)
+                            #     print(f"Skipping video {new_path} because duration {duration} is less than CHUNK_LENGTH {self.config_data.PREPROCESS.CHUNK_LENGTH}")
+                            #     dst.parent.mkdir(parents=True, exist_ok=True)
+                            #     shutil.move(data_faces_path, dst)
+                            #     continue
                             dirs.append(
                                 {
-                                    "index": subject_index,
+                                    "index": f"{subject_index}_{perspective_name}_{emotion_name}_{level_name}_{vid_name}",
+                                    "subject": subject,
                                     "path": vid,
                                 }
                             )
+                            end = time.time()
+
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
+
+        # self.save_db(db_file, db_file_path)
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
@@ -123,27 +187,39 @@ class MEADLoader(BaseLoader):
         filename = os.path.split(data_dirs[i]["path"])[-1]
         saved_filename = data_dirs[i]["index"]
         video_path = data_dirs[i]["path"]
+        print("Processing video: ", video_path)
+        frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
 
-        frames = self.read_video(video_path)
-        bvps = self.generate_pos_uf(frames, fs=self.fs)
-
-        frames_clips, bvps_clips, bvps_pseudo_clips = self.preprocess(
-            frames, bvps, config_preprocess
-        )
+        # if frames.shape[0] < config_preprocess.CHUNK_LENGTH:
+        #     print(f"Video {video_path} has fewer frames ({frames.shape[0]}) than CHUNK_LENGTH ({config_preprocess.CHUNK_LENGTH}). Skipping.")
+        #     data_dirs.remove(i)
+        #     return
 
         if self.pseudo_label_type == "POS_UF":
             print("Using unfiltered POS to generate pseudo_labels")
-            bvps_pseudo_clips = bvps
-
-            # preprocessing required for the pseudo labels
-            chunk_length = config_preprocess.CHUNK_LENGTH
-            clip_num = frames.shape[0] // chunk_length
-
-            bvps_pseudo_clips = self._preprocess_for_alignment(
-                bvps_pseudo_clips, config_preprocess, clip_num, chunk_length
-            )
+            bvps = self.generate_pos_uf(frames, fs=self.fs)
+        elif self.pseudo_label_type == "CHROM":
+            print("Using CHROM to generate pseudo_labels")
+            bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
         else:
-            pass
+            raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
+
+        min_len = min(frames.shape[0], bvps.shape[0])
+        frames = frames[:min_len]
+        bvps = bvps[:min_len]
+
+        assert frames.shape[0] == bvps.shape[0]
+
+        chunk_length = config_preprocess.CHUNK_LENGTH
+
+        usable_len = (min_len // chunk_length) * chunk_length
+
+        frames = frames[:usable_len]
+        bvps = bvps[:usable_len]
+
+        frames_clips, bvps_clips, _ = self.preprocess(frames, bvps, config_preprocess)
+
+        bvps_pseudo_clips = bvps_clips
 
         input_name_list, label_name_list, _ = (
             self.save_multi_process(
@@ -177,18 +253,23 @@ class MEADLoader(BaseLoader):
 
     @staticmethod
     def read_video(video_file):
-        """Reads a video file, returns frames(T,H,W,3)"""
-        print("start of read_video")
-        VidObj = cv2.VideoCapture(video_file)
-        VidObj.set(cv2.CAP_PROP_POS_MSEC, 0)
-        success, frame = VidObj.read()
-        frames = list()
-        while success:
-            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
-            frame = np.asarray(frame)
-            if np.isnan(frame).any():
-                frame[np.isnan(frame)] = 0  # TODO: maybe change into avg
-            frames.append(frame)
-            success, frame = VidObj.read()
-        print("end of read_video")
-        return np.asarray(frames)
+        """Reads face crops from HDF5, returns (T, H, W, 3)."""
+        with h5py.File(video_file, "r") as f:
+            if "faces" not in f:
+                raise KeyError(
+                    f"'faces' key not found in {video_file}. Available: {list(f.keys())}"
+                )
+            return np.array(f["faces"])
+
+    @staticmethod
+    def load_db(db_file):
+        if Path(db_file).exists():
+            with open(db_file, "r") as f:
+                return json.load(f)
+        return {}
+
+    @staticmethod
+    def save_db(db, db_file):
+        print("Saving database...")
+        with open(db_file, "w") as f:
+            json.dump(db, f)
