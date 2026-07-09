@@ -78,19 +78,18 @@ class MEADLoader(BaseLoader):
     def get_raw_data(self, data_path):
         dirs = list()
         data_dirs = glob.glob(data_path + os.sep + "*")
-        # db_file_path = "/homes/cgerz/datasets/mead_frame_counts.json"
-        # db_file = self.load_db(db_file_path)
+        db_file_path = "/homes/cgerz/datasets/mead_frame_counts.json"
+        db_file = self.load_db(db_file_path)
 
-        # dst_root = Path("/data/rppg_20_mead_video_nt_lab/processed/tmp")
-        # src_root = Path("/data/rppg_20_mead_video_nt_lab/processed/cropped_face")
-
+        dst_root = Path("/data/rppg_20_mead_video_nt_lab/processed/tmp")
+        src_root = Path("/data/rppg_20_mead_video_nt_lab/processed/cropped_face")
 
         for subject in data_dirs:
             for perspective in glob.glob(subject + os.sep + "video" + os.sep + "*"):
                 perspective_name = perspective.split(os.sep)[-1]
-                # if perspective_name != "front":
-                #     print(f"Skipping perspective {perspective_name} for subject {subject}")
-                #     continue
+                if perspective_name == "right_30" or perspective_name == "right_60" or perspective_name == "left_30" or perspective_name == "left_60" or perspective_name == "top" or perspective_name == "down":
+                    print(f"Skipping perspective {perspective_name} for subject {subject}")
+                    continue
                 for emotion in glob.glob(perspective + os.sep + "*"):
                     emotion_name = emotion.split(os.sep)[-1]
                     # if emotion_name != "happy":
@@ -107,38 +106,36 @@ class MEADLoader(BaseLoader):
                             if "data_faces.hdf5" not in vid_content:
                                 print(f"Skipping video {vid} because data_faces.hdf5 not found")
                                 continue
-                            # data_faces_path = os.path.join(vid, "data_faces.hdf5")
-                            # relative_path = Path(data_faces_path).relative_to(src_root)
-                            # dst = dst_root / relative_path
-                            #
-                            # parts = Path(data_faces_path).parts
-                            # root = Path(*parts[:3])
-                            # emotion_path = Path(*parts[5:-2])
-                            # clip_id = parts[-2]
-                            #
-                            # new_path = (
-                            #         root
-                            #         / "raw"
-                            #         / emotion_path
-                            #         / f"{clip_id}.mp4"
-                            # )
-                            #
-                            # if data_faces_path not in db_file:
-                            #     duration = self.read_video(data_faces_path).shape[0]
-                            #     print(f"Video {new_path} has duration {duration} frames")
-                            #     print(f"Add video {new_path} with duration {duration} to db_file")
-                            #     db_file[data_faces_path] = duration
-                            # else:
-                            #     duration = db_file[data_faces_path]
-                            #
-                            # if duration < self.config_data.PREPROCESS.CHUNK_LENGTH:
-                            #     print("data_faces_path", data_faces_path)
-                            #     print("dst", dst)
-                            #     print("dst", dst.parent)
-                            #     print(f"Skipping video {new_path} because duration {duration} is less than CHUNK_LENGTH {self.config_data.PREPROCESS.CHUNK_LENGTH}")
-                            #     dst.parent.mkdir(parents=True, exist_ok=True)
-                            #     shutil.move(data_faces_path, dst)
-                            #     continue
+
+                            data_faces_path = os.path.join(vid, "data_faces.hdf5")
+                            relative_path = Path(data_faces_path).relative_to(src_root)
+                            dst = dst_root / relative_path
+
+                            parts = Path(data_faces_path).parts
+                            root = Path(*parts[:3])
+                            emotion_path = Path(*parts[5:-2])
+                            clip_id = parts[-2]
+
+                            new_path = (
+                                    root
+                                    / "raw"
+                                    / emotion_path
+                                    / f"{clip_id}.mp4"
+                            )
+
+                            if data_faces_path not in db_file:
+                                duration = self.read_video(data_faces_path).shape[0]
+                                print(f"Video {new_path} has duration {duration} frames")
+                                print(f"Add video {new_path} with duration {duration} to db_file")
+                                db_file[data_faces_path] = duration
+                            else:
+                                duration = db_file[data_faces_path]
+
+                            if duration < 100:
+                                print(f"Skipping video {new_path} because duration {duration} is less than CHUNK_LENGTH {self.config_data.PREPROCESS.CHUNK_LENGTH}")
+                                dst.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.move(data_faces_path, dst)
+                                continue
                             dirs.append(
                                 {
                                     "index": f"{subject_index}_{perspective_name}_{emotion_name}_{level_name}_{vid_name}",
@@ -151,7 +148,8 @@ class MEADLoader(BaseLoader):
         if not data_dirs:
             raise ValueError(self.dataset_name + " data paths empty!")
 
-        # self.save_db(db_file, db_file_path)
+        self.save_db(db_file, db_file_path)
+        print("Number of files: ", len(dirs))
         return dirs
 
     def split_raw_data(self, data_dirs, begin, end):
@@ -189,11 +187,6 @@ class MEADLoader(BaseLoader):
         video_path = data_dirs[i]["path"]
         print("Processing video: ", video_path)
         frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
-
-        # if frames.shape[0] < config_preprocess.CHUNK_LENGTH:
-        #     print(f"Video {video_path} has fewer frames ({frames.shape[0]}) than CHUNK_LENGTH ({config_preprocess.CHUNK_LENGTH}). Skipping.")
-        #     data_dirs.remove(i)
-        #     return
 
         if self.pseudo_label_type == "POS_UF":
             print("Using unfiltered POS to generate pseudo_labels")
