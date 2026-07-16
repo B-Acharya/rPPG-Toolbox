@@ -464,8 +464,17 @@ class BaseLoader(Dataset):
             WinS = WinM
             WinM = WinS + WinL // 2
             WinE = WinS + WinL
-        BVP = S
-        return BVP
+
+        bvp = S
+        bvp = utils.detrend(np.mat(bvp).H, 100)
+        bvp = np.asarray(np.transpose(bvp))[0]
+
+        # apply hilbert normalization to normalize PPG amplitude
+        analytic_signal = signal.hilbert(bvp)
+        amplitude_envelope = np.abs(analytic_signal)  # derive envelope signal
+        env_norm_bvp = bvp / amplitude_envelope  # normalize by env
+
+        return env_norm_bvp
 
     def generate_pos_uf(self, frames, fs=30):
         """Generated POS-based PPG Psuedo Labels For Training

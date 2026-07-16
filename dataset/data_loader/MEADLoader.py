@@ -87,7 +87,7 @@ class MEADLoader(BaseLoader):
         for subject in data_dirs:
             for perspective in glob.glob(subject + os.sep + "video" + os.sep + "*"):
                 perspective_name = perspective.split(os.sep)[-1]
-                if perspective_name == "right_30" or perspective_name == "right_60" or perspective_name == "left_30" or perspective_name == "left_60" or perspective_name == "top" or perspective_name == "down":
+                if perspective_name != "front":
                     print(f"Skipping perspective {perspective_name} for subject {subject}")
                     continue
                 for emotion in glob.glob(perspective + os.sep + "*"):
@@ -96,6 +96,10 @@ class MEADLoader(BaseLoader):
                     #     print(f"Skipping emotion {emotion_name} for subject {subject} and perspective {perspective_name}")
                     #     continue
                     for level in glob.glob(emotion + os.sep + "*"):
+                        level_name = level.split(os.sep)[-1]
+                        if level_name != "level_1":
+                            print(f"Skipping level {level_name} for subject {subject}")
+                            continue
                         sublevel = glob.glob(level + os.sep + "*")
                         level_name = level.split(os.sep)[-1]
                         for vid in sublevel:
