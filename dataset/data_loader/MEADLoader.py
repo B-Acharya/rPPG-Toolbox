@@ -191,28 +191,31 @@ class MEADLoader(BaseLoader):
         video_path = data_dirs[i]["path"]
         print("Processing video: ", video_path)
         frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
+        bvps = self.generate_pos_uf(frames, fs=self.fs)
 
-        if self.pseudo_label_type == "POS_UF":
-            print("Using unfiltered POS to generate pseudo_labels")
-            bvps = self.generate_pos_uf(frames, fs=self.fs)
-        elif self.pseudo_label_type == "CHROM":
-            print("Using CHROM to generate pseudo_labels")
-            bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
-        else:
-            raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
+        if self.pseudo_label_type is not None:
 
-        min_len = min(frames.shape[0], bvps.shape[0])
-        frames = frames[:min_len]
-        bvps = bvps[:min_len]
+            if self.pseudo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate pseudo_labels")
+                bvps = self.generate_pos_uf(frames, fs=self.fs)
+            elif self.pseudo_label_type == "CHROM":
+                print("Using CHROM to generate pseudo_labels")
+                bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
+            else:
+                raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
 
-        assert frames.shape[0] == bvps.shape[0]
+            min_len = min(frames.shape[0], bvps.shape[0])
+            frames = frames[:min_len]
+            bvps = bvps[:min_len]
 
-        chunk_length = config_preprocess.CHUNK_LENGTH
+            assert frames.shape[0] == bvps.shape[0]
 
-        usable_len = (min_len // chunk_length) * chunk_length
+            chunk_length = config_preprocess.CHUNK_LENGTH
 
-        frames = frames[:usable_len]
-        bvps = bvps[:usable_len]
+            usable_len = (min_len // chunk_length) * chunk_length
+
+            frames = frames[:usable_len]
+            bvps = bvps[:usable_len]
 
         frames_clips, bvps_clips, _ = self.preprocess(frames, bvps, config_preprocess)
 

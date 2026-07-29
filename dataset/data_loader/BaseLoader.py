@@ -127,6 +127,7 @@ class BaseLoader(Dataset):
         # self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
         self.model = model
         self.transform = transform
+        self.config_data = config_data
 
         if model == "PhysFormer":
             self.transform = transforms.Compose(
@@ -207,22 +208,62 @@ class BaseLoader(Dataset):
         # Transform expect the input to be T, C, H, W
         data = data.permute(0, 3, 1, 2)
 
-        if self.transform:
-            data = self.transform(data)
+        if self.transform is not None:
+            if len(self.transform) == 2:
+                student_data = data.clone()
+                teacher_data = data.clone()
 
-        # Permute back to input shape for handling different config specific transforms
-        data = data.permute(0, 2, 3, 1)
+                student_data = self.transform[0](student_data)
+                teacher_data = self.transform[1](teacher_data)
 
-        if self.data_format == "NDCHW":
-            # data = np.transpose(data, (0, 3, 1, 2))
-            data = data.permute(0, 3, 1, 2)
-        elif self.data_format == "NCDHW":
-            # data = np.transpose(data, (3, 0, 1, 2))
-            data = data.permute(3, 0, 1, 2)
-        elif self.data_format == "NDHWC":
-            pass
+                student_data = student_data.permute(0, 2, 3, 1)
+                teacher_data = teacher_data.permute(0, 2, 3, 1)
+
+                if self.data_format == "NDCHW":
+                    # data = np.transpose(data, (0, 3, 1, 2))
+                    student_data = student_data.permute(0, 3, 1, 2)
+                    teacher_data = teacher_data.permute(0, 3, 1, 2)
+                elif self.data_format == "NCDHW":
+                    # data = np.transpose(data, (3, 0, 1, 2))
+                    student_data = student_data.permute(3, 0, 1, 2)
+                    teacher_data = teacher_data.permute(3, 0, 1, 2)
+                elif self.data_format == "NDHWC":
+                    pass
+                else:
+                    raise ValueError("Unsupported Data Format!")
+
+            else:
+                if self.transform:
+                    data = self.transform[0](data)
+
+                # Permute back to input shape for handling different config specific transforms
+                data = data.permute(0, 2, 3, 1)
+
+                if self.data_format == "NDCHW":
+                    # data = np.transpose(data, (0, 3, 1, 2))
+                    data = data.permute(0, 3, 1, 2)
+                elif self.data_format == "NCDHW":
+                    # data = np.transpose(data, (3, 0, 1, 2))
+                    data = data.permute(3, 0, 1, 2)
+                elif self.data_format == "NDHWC":
+                    pass
+                else:
+                    raise ValueError("Unsupported Data Format!")
+
         else:
-            raise ValueError("Unsupported Data Format!")
+            # Permute back to input shape for handling different config specific transforms
+            data = data.permute(0, 2, 3, 1)
+
+            if self.data_format == "NDCHW":
+                # data = np.transpose(data, (0, 3, 1, 2))
+                data = data.permute(0, 3, 1, 2)
+            elif self.data_format == "NCDHW":
+                # data = np.transpose(data, (3, 0, 1, 2))
+                data = data.permute(3, 0, 1, 2)
+            elif self.data_format == "NDHWC":
+                pass
+            else:
+                raise ValueError("Unsupported Data Format!")
         # data = np.float32(data)
         # label = np.float32(label)
         # label_pseudo = np.float32(label_pseudo)
@@ -251,7 +292,7 @@ class BaseLoader(Dataset):
                         data, label, clip_average_HR
                     )
                 if self.transform:
-                    data = self.transform(data)
+                    data = self.transform[0](data)
 
             return (
                 np.transpose(data, (3, 0, 1, 2)),
@@ -261,6 +302,13 @@ class BaseLoader(Dataset):
                 clip_average_HR,
             )
 
+        if self.transform is not None:
+            if len(self.transform) == 2:
+                return (
+                    (student_data, label, filename, chunk_id, label_pseudo),
+                    (teacher_data, label, filename, chunk_id, label_pseudo),
+                )
+            
         return data, label, filename, chunk_id, label_pseudo
 
     def get_single_video_x_aug(self, data, ecg_label, clip_average_HR):
