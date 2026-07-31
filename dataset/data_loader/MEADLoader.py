@@ -28,7 +28,8 @@ class MEADLoader(BaseLoader):
             align=None,
             sensor_type=None,  # Added to match the same path to all the datasets
             pseudo_label_type=None,
-            transform=None,):
+            transform=None,
+            hydra_config=None,):
         """Initializes a MEAD dataloader.
         Args:
             data_path(str): path of a folder which stores raw video.
@@ -55,6 +56,11 @@ class MEADLoader(BaseLoader):
             self.align_signals = AlignSignals(align, config_data.FS)
         else:
             self.align_signals = None
+
+        self.use_high_quality_samples = hydra_config.training.high_quality_samples.enabled
+
+        if self.use_high_quality_samples:
+            self.high_quality_samples = np.load(hydra_config.training.high_quality_samples.path)
 
         if name == "train":
             self.split_path = config_data.SPLIT_PATH
@@ -97,12 +103,16 @@ class MEADLoader(BaseLoader):
                     #     continue
                     for level in glob.glob(emotion + os.sep + "*"):
                         level_name = level.split(os.sep)[-1]
-                        if level_name != "level_1":
-                            print(f"Skipping level {level_name} for subject {subject}")
-                            continue
+                        # if level_name != "level_1":
+                        #     print(f"Skipping level {level_name} for subject {subject}")
+                        #     continue
                         sublevel = glob.glob(level + os.sep + "*")
                         level_name = level.split(os.sep)[-1]
                         for vid in sublevel:
+                            # This should only be used when the model is pretrained
+                            if self.use_high_quality_samples and vid not in self.high_quality_samples:
+                                print(f"Skipping video {vid} because it is not in the high quality samples list")
+                                continue
                             start = time.time()
                             subject_index = subject.split(os.sep)[-1]
                             vid_name = vid.split(os.sep)[-1]

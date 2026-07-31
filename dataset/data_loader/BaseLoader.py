@@ -102,6 +102,7 @@ class BaseLoader(Dataset):
         model,
         device=None,
         transform=None,
+        hydra_config=None
     ):
         """Inits dataloader with lists of files.
 

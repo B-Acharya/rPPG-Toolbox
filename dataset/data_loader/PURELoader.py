@@ -35,6 +35,7 @@ class PURELoader(BaseLoader):
         sensor_type=None,  # Added to match the same path to all the datasets
         pseudo_label_type=None,
         transform=None,
+        hydra_config=None
     ):
         """Initializes an PURE dataloader.
         Args:

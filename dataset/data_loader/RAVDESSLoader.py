@@ -23,7 +23,8 @@ class RAVDESSLoader(BaseLoader):
             align=None,
             sensor_type=None,  # Added to match the same path to all the datasets
             pseudo_label_type=None,
-            transform=None,):
+            transform=None,
+            hydra_config=None):
         """Initializes a RAVDESS dataloader.
         Args:
             data_path(str): path of a folder which stores raw video.
