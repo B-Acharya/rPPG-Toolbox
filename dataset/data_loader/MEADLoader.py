@@ -29,7 +29,7 @@ class MEADLoader(BaseLoader):
             sensor_type=None,  # Added to match the same path to all the datasets
             pseudo_label_type=None,
             transform=None,
-            hydra_config=None,):
+            hydra_config=None):
         """Initializes a MEAD dataloader.
         Args:
             data_path(str): path of a folder which stores raw video.
@@ -78,8 +78,9 @@ class MEADLoader(BaseLoader):
 
         self.pseudo_label_type = pseudo_label_type
         self.config_data = config_data
+        self.transform = transform
 
-        super().__init__(name, data_path, config_data, model)
+        super().__init__(name, data_path, config_data, model, transform=self.transform)
 
     def get_raw_data(self, data_path):
         dirs = list()
@@ -103,9 +104,9 @@ class MEADLoader(BaseLoader):
                     #     continue
                     for level in glob.glob(emotion + os.sep + "*"):
                         level_name = level.split(os.sep)[-1]
-                        # if level_name != "level_1":
-                        #     print(f"Skipping level {level_name} for subject {subject}")
-                        #     continue
+                        if level_name == "level_3" :
+                            print(f"Skipping level {level_name} for subject {subject}")
+                            continue
                         sublevel = glob.glob(level + os.sep + "*")
                         level_name = level.split(os.sep)[-1]
                         for vid in sublevel:
@@ -204,7 +205,6 @@ class MEADLoader(BaseLoader):
         bvps = self.generate_pos_uf(frames, fs=self.fs)
 
         if self.pseudo_label_type is not None:
-
             if self.pseudo_label_type == "POS_UF":
                 print("Using unfiltered POS to generate pseudo_labels")
                 bvps = self.generate_pos_uf(frames, fs=self.fs)

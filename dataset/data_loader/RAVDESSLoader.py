@@ -61,8 +61,10 @@ class RAVDESSLoader(BaseLoader):
             self.use_predefined_splits = True
 
         self.pseudo_label_type = pseudo_label_type
+        self.config_data = config_data
+        self.transform = transform
 
-        super().__init__(name, data_path, config_data, model)
+        super().__init__(name, data_path, config_data, model, hydra_config, transform=self.transform)
 
     def get_raw_data(self, data_path):
         dirs = list()
@@ -119,28 +121,30 @@ class RAVDESSLoader(BaseLoader):
         video_path = data_dirs[i]["path"]
         print("Processing video: ", video_path)
         frames = self.read_video(os.path.join(video_path, "data_faces.hdf5"))
+        bvps = self.generate_pos_uf(frames, fs=self.fs)
 
-        if self.pseudo_label_type == "POS_UF":
-            print("Using unfiltered POS to generate pseudo_labels")
-            bvps = self.generate_pos_uf(frames, fs=self.fs)
-        elif self.pseudo_label_type == "CHROM":
-            print("Using CHROM to generate pseudo_labels")
-            bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
-        else:
-            raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
+        if self.pseudo_label_type is not None:
+            if self.pseudo_label_type == "POS_UF":
+                print("Using unfiltered POS to generate pseudo_labels")
+                bvps = self.generate_pos_uf(frames, fs=self.fs)
+            elif self.pseudo_label_type == "CHROM":
+                print("Using CHROM to generate pseudo_labels")
+                bvps = self.generate_chrom_pseudo_labels(frames, fs=self.fs)
+            else:
+                raise NotImplementedError("The pseudo labels type has to be set to POS_UF or CHROM")
 
-        min_len = min(frames.shape[0], bvps.shape[0])
-        frames = frames[:min_len]
-        bvps = bvps[:min_len]
+            min_len = min(frames.shape[0], bvps.shape[0])
+            frames = frames[:min_len]
+            bvps = bvps[:min_len]
 
-        assert frames.shape[0] == bvps.shape[0]
+            assert frames.shape[0] == bvps.shape[0]
 
-        chunk_length = config_preprocess.CHUNK_LENGTH
+            chunk_length = config_preprocess.CHUNK_LENGTH
 
-        usable_len = (min_len // chunk_length) * chunk_length
+            usable_len = (min_len // chunk_length) * chunk_length
 
-        frames = frames[:usable_len]
-        bvps = bvps[:usable_len]
+            frames = frames[:usable_len]
+            bvps = bvps[:usable_len]
 
         frames_clips, bvps_clips, _ = self.preprocess(frames, bvps, config_preprocess)
 

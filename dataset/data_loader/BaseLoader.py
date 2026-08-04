@@ -210,7 +210,7 @@ class BaseLoader(Dataset):
         data = data.permute(0, 3, 1, 2)
 
         if self.transform is not None:
-            if len(self.transform) == 2:
+            if isinstance(self.transform, list):
                 student_data = data.clone()
                 teacher_data = data.clone()
 
@@ -235,7 +235,7 @@ class BaseLoader(Dataset):
 
             else:
                 if self.transform:
-                    data = self.transform[0](data)
+                    data = self.transform(data)
 
                 # Permute back to input shape for handling different config specific transforms
                 data = data.permute(0, 2, 3, 1)
@@ -293,7 +293,7 @@ class BaseLoader(Dataset):
                         data, label, clip_average_HR
                     )
                 if self.transform:
-                    data = self.transform[0](data)
+                    data = self.transform(data)
 
             return (
                 np.transpose(data, (3, 0, 1, 2)),
@@ -304,7 +304,7 @@ class BaseLoader(Dataset):
             )
 
         if self.transform is not None:
-            if len(self.transform) == 2:
+            if isinstance(self.transform, list):
                 return (
                     (student_data, label, filename, chunk_id, label_pseudo),
                     (teacher_data, label, filename, chunk_id, label_pseudo),
