@@ -29,6 +29,7 @@ class MMPDLoader(BaseLoader):
         sensor_type=None,  # Added to match the same interface as all loaders
         pseudo_label_type=None,
         transform=None,
+        hydra_config=None
     ):
         """Initializes an MMPD dataloader.
         Args:

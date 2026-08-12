@@ -104,7 +104,7 @@ class MEADLoader(BaseLoader):
                     #     continue
                     for level in glob.glob(emotion + os.sep + "*"):
                         level_name = level.split(os.sep)[-1]
-                        if level_name == "level_3" :
+                        if level_name != "level_1" :
                             print(f"Skipping level {level_name} for subject {subject}")
                             continue
                         sublevel = glob.glob(level + os.sep + "*")
