@@ -137,15 +137,15 @@ class BaseLoader(Dataset):
         if self.loo:
             self.participant_ids = config_data.PARTICIPANT_IDS
 
-        if self.do_preprocess:
-            from rPPG_Toolbox.dataset.data_loader.face_detector.YOLO5Face import (
-                YOLO5Face,
-            )
-
-            if "Y5F" in config_data.PREPROCESS.CROP_FACE.BACKEND:
-                self.Y5FObj = YOLO5Face(
-                    config_data.PREPROCESS.CROP_FACE.BACKEND, device
-                )
+        # if self.do_preprocess:
+        #     from rPPG_Toolbox.dataset.data_loader.face_detector.YOLO5Face import (
+        #         YOLO5Face,
+        #     )
+        #
+        #     if "Y5F" in config_data.PREPROCESS.CROP_FACE.BACKEND:
+        #         self.Y5FObj = YOLO5Face(
+        #             config_data.PREPROCESS.CROP_FACE.BACKEND, device
+        #         )
 
         assert config_data.BEGIN < config_data.END
         assert config_data.BEGIN > 0 or config_data.BEGIN == 0
@@ -200,11 +200,11 @@ class BaseLoader(Dataset):
         label_pseudo = np.load(self.labels_pseudo[index])
 
         # Converstion for handling augmenatations
-        data = torch.from_numpy(data).float()
+        data = torch.from_numpy(data)
         data = tv_tensors.Video(data)
 
-        label = torch.from_numpy(label).float()
-        label_pseudo = torch.from_numpy(label_pseudo).float()
+        label = torch.from_numpy(label)
+        label_pseudo = torch.from_numpy(label_pseudo)
 
         # Transform expect the input to be T, C, H, W
         data = data.permute(0, 3, 1, 2)

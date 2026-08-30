@@ -45,6 +45,7 @@ class COHFACELoader(BaseLoader):
         sensor_type=None,
         pseudo_label_type=None,
         transform=None,
+        hydra_config=None,
     ):
         if align is not None:
             self.align_signals = AlignSignals(align, config_data.FS)
