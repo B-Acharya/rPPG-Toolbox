@@ -1,5 +1,7 @@
-from metrics import HR_metrics, Illumination_metrics, metrics
-from plots import plotter
+# from metrics import HR_metrics, Illumination_metrics, metrics
+from rPPG_Toolbox.statistical_analysis.metrics import HR_metrics, Illumination_metrics, metrics
+from rPPG_Toolbox.statistical_analysis.plots import plotter
+# from plots import plotter
 
 import ast
 import pathlib
@@ -40,7 +42,7 @@ class statistical_test:
             samples2: pd.Series,
             model_name: str,
             hypothesis: Literal["two-sided", "less", "great"],
-            debug: Literal[False] | None,
+            debug: Optional[Literal[False]] = None,
     ) -> metrics:
 
         samples1 = samples1.copy()

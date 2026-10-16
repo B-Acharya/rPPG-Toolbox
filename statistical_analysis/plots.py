@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional, Tuple
 from dataclasses import dataclass
-from metrics import metrics
+from rPPG_Toolbox.statistical_analysis.metrics import metrics
 import ptitprince as pt
 
 
